@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: backend
+  datasource:
+    url: jdbc:mysql://${DB_HOST:24.199.77.196}:${DB_PORT:3306}/${DB_NAME:timemark}?allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USER:se}
+    password: ${DB_PASSWORD:sebuaa}
+  sql:
+    init:
+      mode: never
+
+server:
+  port: ${SERVER_PORT:8080}
+
+timemark:
+  jwt:
+    secret: ${JWT_SECRET:TimemarkJwtSecretKeyForDevOnlyReplaceInProd1234567890}
+    expire-hours: ${JWT_EXPIRE_HOURS:12}

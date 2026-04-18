@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:timemark;MODE=MYSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+
+timemark:
+  jwt:
+    secret: TestSecretKeyForJwtSigning12345678901234567890
+    expire-hours: 12
+

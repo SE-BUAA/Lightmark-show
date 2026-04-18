@@ -1,0 +1,60 @@
+CREATE TABLE `user` (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `phone` VARCHAR(20),
+  `email` VARCHAR(100),
+  `password` VARCHAR(255) NOT NULL,
+  `nickname` VARCHAR(50) DEFAULT '',
+  `points` INT DEFAULT 0,
+  `level` TINYINT DEFAULT 0,
+  `status` TINYINT DEFAULT 0,
+  `deleted` TINYINT DEFAULT 0,
+  `create_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `update_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE role (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  role_name VARCHAR(20) NOT NULL,
+  permission VARCHAR(255)
+);
+
+CREATE TABLE user_role (
+  user_id BIGINT NOT NULL,
+  role_id INT NOT NULL,
+  PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE product (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  product_type VARCHAR(20) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  stock INT DEFAULT 0,
+  sold_count INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  order_no VARCHAR(32) NOT NULL,
+  user_id BIGINT NOT NULL,
+  order_type VARCHAR(20) NOT NULL,
+  pay_amount DECIMAL(10,2) NOT NULL,
+  payment_method VARCHAR(20),
+  status TINYINT DEFAULT 0,
+  cancel_reason VARCHAR(255),
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE admin_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  admin_id BIGINT NOT NULL,
+  operation VARCHAR(50) NOT NULL,
+  params VARCHAR(500),
+  result VARCHAR(20),
+  ip VARCHAR(45),
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
