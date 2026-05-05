@@ -13,3 +13,28 @@ server:
   port: ${SERVER_PORT:8080}
 
 timemark:
+  jwt:
+    secret: ${JWT_SECRET:timemark-secret-key-please-change}
+    issuer: ${JWT_ISSUER:timemark}
+    expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+  database:
+    tables:
+      - user
+      - role
+      - user_role
+      - traveler
+      - points_log
+      - user_login_log
+      - product
+      - room_type
+      - product_view_log
+      - orders
+      - payment_record
+      - flight_order_detail
+      - travel_plan
+      - post
+      - post_like
+      - comment
+      - review
+      - question
+      - admin_log

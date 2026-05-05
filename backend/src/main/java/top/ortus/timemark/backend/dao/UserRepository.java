@@ -10,4 +10,12 @@ public interface UserRepository {
     User findByPhone(String phone);
 
     User findByEmail(String email);
+
+    User findByAccount(String account);
+
+    int insert(User user);
+
+    int update(User user);
+
+    int softDeleteById(String id);
 }
