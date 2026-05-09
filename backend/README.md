@@ -288,32 +288,3 @@ mvn clean package
 # 运行打包后的jar
 java -jar target/backend-0.0.1-SNAPSHOT.jar
 ```
-
-## API 文档
-
-### 基础API端点
-
-- `GET /api/health` - 健康检查
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `GET /api/users/me` - 获取当前用户信息
-- `GET /api/admin/dashboard/summary` - 管理员仪表板摘要
-
-### 通用CRUD端点
-
-- `GET /api/crud/{table}` - 查询表数据
-- `POST /api/crud/{table}` - 添加记录
-- `PUT /api/crud/{table}/{id}` - 更新记录
-- `DELETE /api/crud/{table}/{id}` - 删除记录
-
-## 测试
-
-项目包含集成测试，可以通过以下命令运行：
-
-```bash
-mvn test
-```
-
-主要测试文件：
-- [BackendApplicationTests.java](file:///D:/Code/projects/timemark/backend/src/test/java/top/ortus/timemark/backend/BackendApplicationTests.java) - 应用启动测试
-- [AdminApiIntegrationTests.java](file:///D:/Code/projects/timemark/backend/src/test/java/top/ortus/timemark/backend/AdminApiIntegrationTests.java) - 管理员API集成测试
