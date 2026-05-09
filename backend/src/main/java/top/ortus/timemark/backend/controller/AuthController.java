@@ -36,4 +36,3 @@ public class AuthController {
         return ApiResponse.ok(true);
     }
 }
-

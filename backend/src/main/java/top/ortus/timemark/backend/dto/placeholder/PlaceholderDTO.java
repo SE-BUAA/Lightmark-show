@@ -28,4 +28,3 @@ public class PlaceholderDTO {
         this.message = message;
     }
 }
-

@@ -23,4 +23,3 @@ public class UserRoleDTO {
         this.role_id = role_id;
     }
 }
-

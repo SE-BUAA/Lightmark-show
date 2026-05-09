@@ -97,4 +97,3 @@ public class CommentDTO {
         this.create_time = create_time;
     }
 }
-

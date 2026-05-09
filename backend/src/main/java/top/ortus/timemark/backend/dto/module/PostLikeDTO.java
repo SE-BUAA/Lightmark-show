@@ -43,4 +43,3 @@ public class PostLikeDTO {
         this.create_time = create_time;
     }
 }
-

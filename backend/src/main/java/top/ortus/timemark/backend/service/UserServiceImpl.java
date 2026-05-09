@@ -11,15 +11,21 @@ import top.ortus.timemark.backend.dto.user.UserUpdateRequest;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 用户服务实现类，提供用户相关的业务逻辑
+ */
 @Service
 public class UserServiceImpl implements UserService {
 
     private final UserRepositoryImpl userRepositoryImpl;
 
+    /**
+     * 构造函数
+     * @param userRepositoryImpl 用户数据访问层实现
+     */
     public UserServiceImpl(UserRepositoryImpl userRepositoryImpl) {
         this.userRepositoryImpl = userRepositoryImpl;
     }
-
 
     @Override
     public List<UserDTO> findAll() {
@@ -117,6 +123,11 @@ public class UserServiceImpl implements UserService {
         return userRepositoryImpl.softDeleteById(id) > 0;
     }
 
+    /**
+     * 验证创建用户请求
+     * @param request 创建请求
+     * @throws IllegalArgumentException 如果请求无效
+     */
     private void validateCreateRequest(UserCreateRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request is required");
@@ -130,6 +141,11 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    /**
+     * 获取默认注册来源
+     * @param request 创建请求
+     * @return 注册来源
+     */
     private String defaultRegisterSource(UserCreateRequest request) {
         if (request.getEmail() != null && !request.getEmail().isEmpty()) {
             return "EMAIL";
@@ -137,6 +153,12 @@ public class UserServiceImpl implements UserService {
         return "PHONE";
     }
 
+    /**
+     * 获取字符串值或默认值
+     * @param value 原始值
+     * @param fallback 默认值
+     * @return 值或默认值
+     */
     private String valueOrDefault(String value, String fallback) {
         if (value == null) {
             return fallback;
@@ -144,6 +166,12 @@ public class UserServiceImpl implements UserService {
         return value;
     }
 
+    /**
+     * 获取整数值或默认值
+     * @param value 原始值
+     * @param fallback 默认值
+     * @return 值或默认值
+     */
     private int valueOrDefault(Integer value, int fallback) {
         if (value == null) {
             return fallback;
@@ -151,6 +179,12 @@ public class UserServiceImpl implements UserService {
         return value;
     }
 
+    /**
+     * 获取短整数值或默认值
+     * @param value 原始值
+     * @param fallback 默认值
+     * @return 值或默认值
+     */
     private short valueOrDefault(Short value, short fallback) {
         if (value == null) {
             return fallback;

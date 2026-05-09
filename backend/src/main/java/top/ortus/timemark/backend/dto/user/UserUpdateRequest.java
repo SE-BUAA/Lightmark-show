@@ -106,4 +106,3 @@ public class UserUpdateRequest {
         this.last_login_ip = last_login_ip;
     }
 }
-

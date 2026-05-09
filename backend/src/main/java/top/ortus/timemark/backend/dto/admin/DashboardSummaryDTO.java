@@ -40,4 +40,3 @@ public class DashboardSummaryDTO {
         this.totalRevenue = totalRevenue;
     }
 }
-

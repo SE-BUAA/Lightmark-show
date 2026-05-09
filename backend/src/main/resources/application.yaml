@@ -2,6 +2,7 @@ spring:
   application:
     name: backend
   datasource:
+    # Database connection configuration
     url: jdbc:mysql://${DB_HOST:24.199.77.196}:${DB_PORT:3306}/${DB_NAME:lightmark}?allowPublicKeyRetrieval=true&useSSL=false
     username: ${DB_USER:se}
     password: ${DB_PASSWORD:sebuaa}
@@ -10,14 +11,17 @@ spring:
       mode: never
 
 server:
+  # Server port configuration
   port: ${SERVER_PORT:8080}
 
 timemark:
   jwt:
+    # JWT token configuration
     secret: ${JWT_SECRET:timemark-secret-key-please-change}
     issuer: ${JWT_ISSUER:timemark}
     expire-minutes: ${JWT_EXPIRE_MINUTES:120}
   database:
+    # Database table definitions
     tables:
       - user
       - role

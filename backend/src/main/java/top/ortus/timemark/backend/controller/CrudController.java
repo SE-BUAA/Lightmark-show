@@ -6,9 +6,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.common.PageResponse;
 import top.ortus.timemark.backend.service.GenericCrudService;
@@ -16,8 +14,6 @@ import top.ortus.timemark.backend.service.GenericCrudService;
 import java.util.List;
 import java.util.Map;
 
-@RestController
-@RequestMapping("/api/crud")
 public class CrudController {
 
     private final GenericCrudService genericCrudService;
@@ -60,4 +56,3 @@ public class CrudController {
         return ApiResponse.ok(genericCrudService.delete(table, payload));
     }
 }
-

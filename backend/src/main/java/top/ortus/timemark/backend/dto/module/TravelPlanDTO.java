@@ -89,4 +89,3 @@ public class TravelPlanDTO {
         this.create_time = create_time;
     }
 }
-

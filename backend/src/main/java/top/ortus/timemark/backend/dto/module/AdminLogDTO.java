@@ -70,4 +70,3 @@ public class AdminLogDTO {
         this.create_time = create_time;
     }
 }
-

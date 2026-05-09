@@ -97,4 +97,3 @@ public class PostDTO {
         this.update_time = update_time;
     }
 }
-

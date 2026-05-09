@@ -21,3 +21,12 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+.agents
+
+
+#file
+软件工程基础2026春大作业要求.md
+数据库设计.md
+API.md
+需求划分文档.md
+

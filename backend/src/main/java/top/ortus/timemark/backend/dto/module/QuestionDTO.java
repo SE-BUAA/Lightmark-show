@@ -88,4 +88,3 @@ public class QuestionDTO {
         this.answer_time = answer_time;
     }
 }
-

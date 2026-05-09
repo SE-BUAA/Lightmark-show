@@ -70,4 +70,3 @@ public class TravelerDTO {
         this.create_time = create_time;
     }
 }
-

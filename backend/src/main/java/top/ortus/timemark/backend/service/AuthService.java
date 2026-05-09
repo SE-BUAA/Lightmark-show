@@ -11,10 +11,14 @@ import top.ortus.timemark.backend.dto.auth.AuthLoginRequest;
 import top.ortus.timemark.backend.dto.auth.AuthRegisterRequest;
 import top.ortus.timemark.backend.dto.auth.AuthTokenDTO;
 import top.ortus.timemark.backend.exception.ApiException;
+import top.ortus.timemark.backend.security.UserIdentity;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 认证服务类，处理用户注册、登录等认证相关功能
+ */
 @Service
 public class AuthService {
 
@@ -22,11 +26,22 @@ public class AuthService {
     private final JwtTokenService jwtTokenService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
+    /**
+     * 构造函数
+     * @param userRepositoryImpl 用户数据访问层实现
+     * @param jwtTokenService JWT 令牌服务
+     */
     public AuthService(UserRepositoryImpl userRepositoryImpl, JwtTokenService jwtTokenService) {
         this.userRepositoryImpl = userRepositoryImpl;
         this.jwtTokenService = jwtTokenService;
     }
 
+    /**
+     * 用户注册
+     * @param request 注册请求，包含账号、密码和昵称
+     * @return 注册成功的用户信息
+     * @throws ApiException 如果账号已存在或参数无效
+     */
     public UserDTO register(AuthRegisterRequest request) {
         if (request == null || request.getAccount() == null || request.getAccount().isEmpty()) {
             throw new ApiException(400, "account is required");
@@ -65,6 +80,12 @@ public class AuthService {
         return UserConverter.toDto(created);
     }
 
+    /**
+     * 用户登录
+     * @param request 登录请求，包含账号和密码
+     * @return 登录成功后的令牌和用户信息
+     * @throws ApiException 如果账号或密码无效
+     */
     public AuthTokenDTO login(AuthLoginRequest request) {
         if (request == null || request.getAccount() == null || request.getAccount().isEmpty()) {
             throw new ApiException(400, "account is required");
@@ -81,7 +102,9 @@ public class AuthService {
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new ApiException(401, "invalid credentials");
         }
-        String token = jwtTokenService.createToken(Long.valueOf(user.getId()), user.getNickname(), List.of("USER"));
-        return new AuthTokenDTO(token, user.getId(), user.getNickname());
+        UserIdentity identity = userRepositoryImpl.findIdentityByUserId(user.getId());
+        List<String> roles = List.of(identity.name());
+        String token = jwtTokenService.createToken(Long.valueOf(user.getId()), user.getNickname(), identity);
+        return new AuthTokenDTO(token, user.getId(), user.getNickname(), user.getAvatar(), identity.name(), roles);
     }
 }

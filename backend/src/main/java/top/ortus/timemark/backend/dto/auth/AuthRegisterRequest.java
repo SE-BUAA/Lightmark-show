@@ -32,4 +32,3 @@ public class AuthRegisterRequest {
         this.nickname = nickname;
     }
 }
-

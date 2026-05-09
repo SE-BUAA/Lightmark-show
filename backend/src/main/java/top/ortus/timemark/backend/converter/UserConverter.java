@@ -7,11 +7,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 用户转换器，用于在 User 实体和 UserDTO 之间进行转换
+ */
 public class UserConverter {
 
     private UserConverter() {
     }
 
+    /**
+     * 将 User 实体转换为 UserDTO
+     * @param user 用户实体
+     * @return 用户数据传输对象
+     */
     public static UserDTO toDto(User user) {
         if (user == null) {
             return null;
@@ -34,6 +42,11 @@ public class UserConverter {
         );
     }
 
+    /**
+     * 将 User 实体列表转换为 UserDTO 列表
+     * @param users 用户实体列表
+     * @return 用户数据传输对象列表
+     */
     public static List<UserDTO> toDtoList(List<User> users) {
         if (users == null || users.isEmpty()) {
             return Collections.emptyList();
@@ -43,4 +56,3 @@ public class UserConverter {
                 .collect(Collectors.toList());
     }
 }
-

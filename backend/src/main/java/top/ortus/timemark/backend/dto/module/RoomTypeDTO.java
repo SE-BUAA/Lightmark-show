@@ -61,4 +61,3 @@ public class RoomTypeDTO {
         this.breakfast = breakfast;
     }
 }
-

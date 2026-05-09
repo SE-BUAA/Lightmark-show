@@ -52,4 +52,3 @@ public class ProductViewLogDTO {
         this.ip = ip;
     }
 }
-

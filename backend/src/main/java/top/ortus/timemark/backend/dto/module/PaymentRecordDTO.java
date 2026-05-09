@@ -80,4 +80,3 @@ public class PaymentRecordDTO {
         this.create_time = create_time;
     }
 }
-

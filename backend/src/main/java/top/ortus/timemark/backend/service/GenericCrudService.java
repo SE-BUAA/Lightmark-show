@@ -21,6 +21,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 通用的 CRUD 服务类，提供对数据库表的增删改查操作
+ * 支持动态表名操作，使用命名参数进行 SQL 查询
+ * 自动处理主键、字段过滤和软删除
+ */
 @Service
 public class GenericCrudService {
 
@@ -29,8 +34,16 @@ public class GenericCrudService {
     private final DataSource dataSource;
     private final TimemarkDatabaseProperties databaseProperties;
     private final ObjectMapper objectMapper;
+    // 表元数据缓存，避免重复读取数据库结构
     private final Map<String, TableMeta> metaCache = new ConcurrentHashMap<>();
 
+    /**
+     * 构造函数，初始化 JDBC 模板和相关组件
+     * @param jdbcTemplate JDBC 模板，用于执行 SQL 查询
+     * @param dataSource 数据源，用于获取数据库连接读取元数据
+     * @param databaseProperties 数据库配置，包含允许访问的表列表
+     * @param objectMapper JSON 对象映射器，用于类型转换
+     */
     public GenericCrudService(JdbcTemplate jdbcTemplate,
                               DataSource dataSource,
                               TimemarkDatabaseProperties databaseProperties,
@@ -42,6 +55,12 @@ public class GenericCrudService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 查询指定表的所有数据，支持可选的过滤条件
+     * @param table 表名
+     * @param filters 过滤条件，键为列名，值为过滤值
+     * @return 符合条件的数据列表，每条数据为 Map
+     */
     public List<Map<String, Object>> list(String table, Map<String, String> filters) {
         TableMeta meta = loadMeta(table);
         StringBuilder sql = new StringBuilder("select * from `" + table + "`");
@@ -62,11 +81,25 @@ public class GenericCrudService {
         return namedParameterJdbcTemplate.queryForList(sql.toString(), params);
     }
 
+    /**
+     * 查询指定表的数据，并将结果转换为指定的类型
+     * @param table 表名
+     * @param filters 过滤条件
+     * @param type 目标类型，用于将查询结果转换为该类型的列表
+     * @return 符合条件的数据列表，类型为指定的类型
+     */
     public <T> List<T> listTyped(String table, Map<String, String> filters, Class<T> type) {
         List<Map<String, Object>> items = list(table, filters);
         return objectMapper.convertValue(items, objectMapper.getTypeFactory().constructCollectionType(List.class, type));
     }
 
+    /**
+     * 根据主键 ID 查询单条数据
+     * @param table 表名
+     * @param id 主键值
+     * @return 查询到的数据 Map，如果不存在则抛出异常
+     * @throws ApiException 如果表有复合主键或记录不存在
+     */
     public Map<String, Object> getById(String table, String id) {
         TableMeta meta = loadMeta(table);
         if (meta.pkColumns.size() != 1) {
@@ -77,11 +110,25 @@ public class GenericCrudService {
         return jdbcTemplate.queryForMap(sql, id);
     }
 
+    /**
+     * 根据主键 ID 查询单条数据，并将结果转换为指定的类型
+     * @param table 表名
+     * @param id 主键值
+     * @param type 目标类型
+     * @return 查询到的数据，类型为指定的类型
+     */
     public <T> T getByIdTyped(String table, String id, Class<T> type) {
         Map<String, Object> data = getById(table, id);
         return objectMapper.convertValue(data, type);
     }
 
+    /**
+     * 向指定表插入一条新数据
+     * @param table 表名
+     * @param payload 要插入的数据，键为列名，值为列值
+     * @return 插入的数据（已过滤只包含有效列）
+     * @throws ApiException 如果 payload 为空或表不在允许列表中
+     */
     public Map<String, Object> create(String table, Map<String, Object> payload) {
         TableMeta meta = loadMeta(table);
         Map<String, Object> filtered = filterColumns(meta, payload);
@@ -107,12 +154,26 @@ public class GenericCrudService {
         return filtered;
     }
 
+    /**
+     * 向指定表插入一条新数据，并将输入对象转换为指定类型返回
+     * @param table 表名
+     * @param payload 要插入的数据对象
+     * @param type 目标类型
+     * @return 插入的数据，类型为指定的类型
+     */
     public <T> T createTyped(String table, T payload, Class<T> type) {
         Map<String, Object> map = objectMapper.convertValue(payload, new TypeReference<>() {});
         Map<String, Object> result = create(table, map);
         return objectMapper.convertValue(result, type);
     }
 
+    /**
+     * 更新指定表的数据，使用主键作为更新条件
+     * @param table 表名
+     * @param payload 要更新的数据，必须包含主键字段
+     * @return 更新后的数据（已过滤只包含有效列）
+     * @throws ApiException 如果缺少主键、没有可更新字段或表不在允许列表中
+     */
     public Map<String, Object> update(String table, Map<String, Object> payload) {
         TableMeta meta = loadMeta(table);
         Map<String, Object> filtered = filterColumns(meta, payload);
@@ -155,12 +216,27 @@ public class GenericCrudService {
         return filtered;
     }
 
+    /**
+     * 更新指定表的数据，并将输入输出对象转换为指定类型
+     * @param table 表名
+     * @param payload 要更新的数据对象
+     * @param type 目标类型
+     * @return 更新后的数据，类型为指定的类型
+     */
     public <T> T updateTyped(String table, T payload, Class<T> type) {
         Map<String, Object> map = objectMapper.convertValue(payload, new TypeReference<>() {});
         Map<String, Object> result = update(table, map);
         return objectMapper.convertValue(result, type);
     }
 
+    /**
+     * 删除指定表的数据，使用主键作为删除条件
+     * 如果表有 deleted 字段，则执行软删除（设置 deleted=1），否则执行物理删除
+     * @param table 表名
+     * @param keys 包含主键值的 Map
+     * @return 是否成功删除（影响行数大于0返回true）
+     * @throws ApiException 如果缺少主键或表不在允许列表中
+     */
     public boolean delete(String table, Map<String, Object> keys) {
         TableMeta meta = loadMeta(table);
         if (keys == null || keys.isEmpty()) {
@@ -189,11 +265,23 @@ public class GenericCrudService {
         return namedParameterJdbcTemplate.update(sql, params) > 0;
     }
 
+    /**
+     * 删除指定表的数据，并将输入对象转换为指定类型
+     * @param table 表名
+     * @param payload 包含主键值的数据对象
+     * @return 是否成功删除
+     */
     public <T> boolean deleteTyped(String table, T payload) {
         Map<String, Object> map = objectMapper.convertValue(payload, new TypeReference<>() {});
         return delete(table, map);
     }
 
+    /**
+     * 加载指定表的元数据，首先检查缓存，然后从数据库读取
+     * @param table 表名
+     * @return 表的元数据对象
+     * @throws ApiException 如果表不在允许列表中
+     */
     private TableMeta loadMeta(String table) {
         if (!databaseProperties.getTables().contains(table)) {
             throw new ApiException(404, "unknown table");
@@ -201,6 +289,12 @@ public class GenericCrudService {
         return metaCache.computeIfAbsent(table, this::readMeta);
     }
 
+    /**
+     * 从数据库读取指定表的元数据，包括列信息和主键信息
+     * @param table 表名
+     * @return 表的元数据对象
+     * @throws ApiException 如果读取元数据失败
+     */
     private TableMeta readMeta(String table) {
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData metaData = connection.getMetaData();
@@ -230,6 +324,12 @@ public class GenericCrudService {
         }
     }
 
+    /**
+     * 过滤 payload 中的字段，只保留表中存在的列
+     * @param meta 表的元数据
+     * @param payload 原始数据
+     * @return 过滤后的数据，只包含表中存在的列
+     */
     private Map<String, Object> filterColumns(TableMeta meta, Map<String, Object> payload) {
         Map<String, Object> filtered = new HashMap<>();
         if (payload == null) {
@@ -244,6 +344,9 @@ public class GenericCrudService {
         return filtered;
     }
 
+    /**
+     * 表元数据内部类，用于缓存表的结构信息
+     */
     private static class TableMeta {
         private final List<String> columns;
         private final List<String> pkColumns;
@@ -256,4 +359,3 @@ public class GenericCrudService {
         }
     }
 }
-

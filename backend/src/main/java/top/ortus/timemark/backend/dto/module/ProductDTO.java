@@ -107,4 +107,3 @@ public class ProductDTO {
         this.update_time = update_time;
     }
 }
-

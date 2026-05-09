@@ -79,4 +79,3 @@ public class FlightOrderDetailDTO {
         this.insurance = insurance;
     }
 }
-

@@ -2,6 +2,9 @@ package top.ortus.timemark.backend.dao;
 
 import java.time.LocalDateTime;
 
+/**
+ * 用户实体类，对应数据库中的 user 表
+ */
 public class User {
     private String id;
     private String phone;

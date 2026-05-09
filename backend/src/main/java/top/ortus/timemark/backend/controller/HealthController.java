@@ -15,4 +15,3 @@ public class HealthController {
         return ApiResponse.ok(new HealthDTO("UP"));
     }
 }
-

@@ -79,4 +79,3 @@ public class ReviewDTO {
         this.create_time = create_time;
     }
 }
-

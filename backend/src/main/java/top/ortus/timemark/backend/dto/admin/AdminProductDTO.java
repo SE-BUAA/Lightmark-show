@@ -80,4 +80,3 @@ public class AdminProductDTO {
         this.update_time = update_time;
     }
 }
-

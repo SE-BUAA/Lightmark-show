@@ -70,4 +70,3 @@ public class PointsLogDTO {
         this.create_time = create_time;
     }
 }
-

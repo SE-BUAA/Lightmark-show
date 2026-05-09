@@ -98,4 +98,3 @@ public class AdminOrderDTO {
         this.update_time = update_time;
     }
 }
-

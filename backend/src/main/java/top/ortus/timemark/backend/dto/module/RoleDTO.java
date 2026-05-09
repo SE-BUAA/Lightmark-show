@@ -32,4 +32,3 @@ public class RoleDTO {
         this.permission = permission;
     }
 }
-

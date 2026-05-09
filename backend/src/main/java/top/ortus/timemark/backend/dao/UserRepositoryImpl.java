@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import top.ortus.timemark.backend.security.UserIdentity;
 
 import javax.sql.DataSource;
 import java.sql.PreparedStatement;
@@ -20,6 +21,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 用户数据访问实现类，提供用户相关的数据库操作
+ */
 @Repository
 public class UserRepositoryImpl implements UserRepository {
 
@@ -28,6 +32,10 @@ public class UserRepositoryImpl implements UserRepository {
     private final DataSource dataSource;
     private final Set<String> columnsCache = ConcurrentHashMap.newKeySet();
 
+    /**
+     * 构造函数
+     * @param jdbcTemplate JDBC 模板
+     */
     public UserRepositoryImpl(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
@@ -118,6 +126,31 @@ public class UserRepositoryImpl implements UserRepository {
         return jdbcTemplate.update(sql, id);
     }
 
+    @Override
+    public UserIdentity findIdentityByUserId(String userId) {
+        String sql = """
+                select r.role_name
+                from user_role ur
+                join role r on ur.role_id = r.id
+                where ur.user_id = ?
+                """;
+        List<String> roleNames = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("role_name"), userId);
+        if (roleNames.isEmpty()) {
+            return UserIdentity.USER;
+        }
+        for (String roleName : roleNames) {
+            if (UserIdentity.ADMIN == UserIdentity.fromRoleName(roleName)) {
+                return UserIdentity.ADMIN;
+            }
+        }
+        return UserIdentity.fromRoleName(roleNames.get(0));
+    }
+
+    /**
+     * 将 LocalDateTime 转换为 Timestamp
+     * @param value LocalDateTime 值
+     * @return Timestamp 值
+     */
     private Timestamp toTimestamp(LocalDateTime value) {
         if (value == null) {
             return null;
@@ -125,6 +158,12 @@ public class UserRepositoryImpl implements UserRepository {
         return Timestamp.valueOf(value);
     }
 
+    /**
+     * 构建数据库操作的数据负载
+     * @param user 用户实体
+     * @param includeCreateTime 是否包含创建时间
+     * @return 数据负载 Map
+     */
     private Map<String, Object> buildPayload(User user, boolean includeCreateTime) {
         Map<String, Object> payload = new LinkedHashMap<>();
         putIfPresent(payload, "phone", user.getPhone());
@@ -146,6 +185,12 @@ public class UserRepositoryImpl implements UserRepository {
         return payload;
     }
 
+    /**
+     * 如果值存在且列存在，则添加到负载中
+     * @param payload 数据负载
+     * @param column 列名
+     * @param value 值
+     */
     private void putIfPresent(Map<String, Object> payload, String column, Object value) {
         if (value == null || !hasColumn(column)) {
             return;
@@ -153,6 +198,11 @@ public class UserRepositoryImpl implements UserRepository {
         payload.put(column, value);
     }
 
+    /**
+     * 检查表中是否存在指定列
+     * @param column 列名
+     * @return 是否存在
+     */
     private boolean hasColumn(String column) {
         if (columnsCache.isEmpty()) {
             loadColumns();
@@ -160,6 +210,9 @@ public class UserRepositoryImpl implements UserRepository {
         return columnsCache.contains(column.toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * 从数据库加载表的列信息到缓存
+     */
     private void loadColumns() {
         try {
             if (dataSource == null) {
