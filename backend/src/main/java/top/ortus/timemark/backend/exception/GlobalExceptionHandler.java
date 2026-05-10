@@ -1,28 +1,60 @@
 package top.ortus.timemark.backend.exception;
 
-import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import top.ortus.timemark.backend.common.ApiResponse;
 
+/**
+ * 全局异常处理器，统一处理应用程序中的各种异常
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(BusinessException.class)
-    public ApiResponse<Void> handleBusiness(BusinessException ex) {
-        return ApiResponse.fail(ex.getCode(), ex.getMessage());
+    /**
+     * 处理 API 异常
+     * @param ex API 异常
+     * @return 错误响应
+     */
+    @ExceptionHandler(ApiException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleApiException(ApiException ex) {
+        return ApiResponse.error(ex.getCode(), ex.getMessage());
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class, HttpMessageNotReadableException.class})
-    public ApiResponse<Void> handleBadRequest(Exception ex) {
-        return ApiResponse.fail(400, "请求参数错误");
+    /**
+     * 处理非法参数异常
+     * @param ex 非法参数异常
+     * @return 错误响应
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException ex) {
+        return ApiResponse.error(400, ex.getMessage());
     }
 
+    /**
+     * 处理参数验证异常和消息不可读异常
+     * @param ex 异常
+     * @return 错误响应
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleValidation(Exception ex) {
+        return ApiResponse.error(400, "invalid request");
+    }
+
+    /**
+     * 处理通用异常
+     * @param ex 异常
+     * @return 错误响应
+     */
     @ExceptionHandler(Exception.class)
-    public ApiResponse<Void> handleUnknown(Exception ex) {
-        return ApiResponse.fail(500, "服务器内部错误");
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ApiResponse<Void> handleGeneric(Exception ex) {
+        return ApiResponse.error(500, "internal error");
     }
 }
-
