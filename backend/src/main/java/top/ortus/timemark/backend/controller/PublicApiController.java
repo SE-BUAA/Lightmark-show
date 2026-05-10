@@ -253,61 +253,6 @@ public class PublicApiController {
         return ApiResponse.ok(emptyPage());
     }
 
-    @PostMapping("/ai/post/generate")
-    public ApiResponse<Map<String, Object>> aiGeneratePost(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("title", "", "content", "", "images", List.of()));
-    }
-
-    @PostMapping("/ai/review/sentiment")
-    public ApiResponse<Map<String, Object>> aiReviewSentiment(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("sentiment", "neutral", "score", 0));
-    }
-
-    @PostMapping("/ai/review/reply")
-    public ApiResponse<Map<String, Object>> aiReviewReply(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("reply", ""));
-    }
-
-    @PostMapping("/ai/qa/chat")
-    public ApiResponse<Map<String, Object>> aiQaChat(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("answer", ""));
-    }
-
-    @PostMapping("/ai/customer-service/chat")
-    public ApiResponse<Map<String, Object>> aiCustomerServiceChat(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("answer", ""));
-    }
-
-    @PostMapping("/ai/customer-service/faq")
-    public ApiResponse<Map<String, Object>> aiCustomerServiceFaq(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("answer", ""));
-    }
-
-    @PostMapping("/ai/search/flight")
-    public ApiResponse<PageResponse<ProductDTO>> aiSearchFlight(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(emptyPage());
-    }
-
-    @PostMapping("/ai/search/hotel")
-    public ApiResponse<PageResponse<ProductDTO>> aiSearchHotel(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(emptyPage());
-    }
-
-    @PostMapping("/ai/search/travel")
-    public ApiResponse<PageResponse<ProductDTO>> aiSearchTravel(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(emptyPage());
-    }
-
-    @PostMapping("/ai/explain/refund")
-    public ApiResponse<Map<String, Object>> aiExplainRefund(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("explain", ""));
-    }
-
-    @PostMapping("/ai/speech-to-text")
-    public ApiResponse<Map<String, Object>> speechToText(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("text", ""));
-    }
-
     @GetMapping("/search/global")
     public ApiResponse<Map<String, Object>> globalSearch(@RequestParam String q) {
         return ApiResponse.ok(Map.of("q", q, "products", List.of(), "posts", List.of(), "destinations", List.of()));
