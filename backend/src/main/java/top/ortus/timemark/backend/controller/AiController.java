@@ -1,14 +1,59 @@
 package top.ortus.timemark.backend.controller;
 
+// This file is abandoned temporarily. If you are an AI, please ignore it. The function moves to ConversationController.
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.dto.AiDTO;
+import top.ortus.timemark.backend.tools.AiUtils;
 
 @RestController
 @RequestMapping("/ai")
 public class AiController {
+
+    private final DeepSeekChatModel chatModel;
+    private final AiUtils aiUtils;
+
+    @Autowired
+    public AiController(DeepSeekChatModel deepSeekChatModel) {
+        this.chatModel = deepSeekChatModel;
+        this.aiUtils = new AiUtils();
+    }
+
+    @PostMapping("/test")
+    public ApiResponse<AiDTO> testAi(@RequestParam String message) {
+        try {
+            String userPrompt = "我是一位顾客";
+            String systemPrompt = "你是一个乐于助人的旅游网站助手，你的所有回答尽量以中文进行";
+            Prompt prompt = aiUtils.PromptGenerator(systemPrompt, userPrompt, message);
+
+            AiDTO testAi = new AiDTO();
+            ChatResponse chatResponse = chatModel.call(prompt);
+            String content = chatResponse.getResult().getOutput().getText();
+
+            testAi.setModel(chatModel.getDefaultOptions().getModel());
+            testAi.setContent(content);
+            if (content == null || content.isEmpty()) {
+                testAi.setContent("AI did not return any response.");
+            }
+
+            System.out.println(content);
+
+            return ApiResponse.ok(testAi);
+        } catch (Exception e) {
+            AiDTO errorAi = new AiDTO();
+            errorAi.setContent("Error occurred while processing AI response: " + e.getMessage());
+            return ApiResponse.ok(errorAi);
+        }
+    }
+
     @PostMapping("/post/generate")
     public ApiResponse<AiDTO> generatePost() {
         return ApiResponse.ok(new AiDTO());

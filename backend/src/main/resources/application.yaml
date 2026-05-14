@@ -9,6 +9,60 @@ spring:
   sql:
     init:
       mode: never
+  ai:
+    openai:  #Disabled
+      api-key: ${OPENAI_API_KEY:your-openai-api-key} # Configure in your environment variables for security
+    deepseek:
+        # DEEPSEEK API configuration
+      base-url: https://api.deepseek.com/v1
+      api-key: ${DEEPSEEK_API_KEY:your-deepseek-api-key} # Configure in your environment variables for security
+      chat:
+        options:
+          model: deepseek-v4-flash  # Fast and responsive model for immediate results
+          temperature: 0.7
+          internal-tool-execution-enabled: true
+          tool-names:
+            - search_web
+            - update_email
+            - update_nickname
+
+#  DeepSeek Chat Model 的配置分为三类：重试 (Retry)、连接 (Connection) 和聊天选项 (Chat Options)。其核心配置的完整参考如下：
+#  ⚙️ 核心配置总览
+#  配置项	描述	默认值
+#  spring.ai.deepseek.api-key	DeepSeek API 密钥。	无 (必填)
+#  spring.ai.deepseek.base-url	API 服务地址。	https://api.deepseek.com
+#  spring.ai.deepseek.chat.options.model	指定使用的模型。	deepseek-chat
+#  spring.ai.deepseek.chat.options.temperature	控制生成文本的随机性和创造性，值越高，输出越随机。	0.7
+#  spring.ai.deepseek.chat.options.maxTokens	生成的最大 token 数。	-
+#  spring.ai.deepseek.chat.options.topP	核采样，仅考虑概率质量在 top-p 范围内的 token。	1.0
+#  spring.ai.deepseek.chat.options.frequencyPenalty	频率惩罚，取值 -2.0 到 2.0，正值会降低重复相同行的可能性。	0.0
+#  spring.ai.deepseek.chat.options.presencePenalty	存在惩罚，取值 -2.0 到 2.0，正值会鼓励模型谈论新主题。	0.0
+#  spring.ai.deepseek.chat.options.stop	停止序列：API 遇到这些序列将停止生成 token。	-
+#  🎯 高级控制参数
+#  配置项	描述	默认值
+#  spring.ai.deepseek.chat.options.logprobs	是否返回输出 token 的对数概率。	false
+#  spring.ai.deepseek.chat.options.topLogprobs	返回最有可能的 token 数量（0-20）。	-
+#  spring.ai.deepseek.chat.options.tool-names	需要启用的工具名称列表，用于函数调用。	none (不调用)
+#  spring.ai.deepseek.chat.options.tool-callbacks	注册到 ChatModel 的工具回调。	-
+#  spring.ai.deepseek.chat.options.internal-tool-execution-enabled	若设为 false，Spring AI 不处理工具调用，而是交给客户端。	true
+#  spring.ai.deepseek.chat.options.responseFormat	控制模型的输出格式，如 json_object 可确保输出是有效的 JSON。	text
+#  🤖 模型选择
+#  模型 ID	描述
+#  deepseek-v4-flash	适用于需要快速响应的场景，提供较高的速度和合理的准确性。
+#  deepseek-v4-pro	专业需要深度逻辑分析和思考的场景，提供更高级的功能和性能。
+#  🔗 连接与重试配置
+#  连接属性
+#  配置项	描述	默认值
+#  spring.ai.deepseek.base-url	API 连接地址。	https://api.deepseek.com
+#  spring.ai.deepseek.chat.base-url	(可选) 聊天模型的专用 API 地址，会覆盖通用配置。	-
+#  spring.ai.deepseek.chat.completions-path	聊天补全 API 的端点路径。	/chat/completions
+#  spring.ai.deepseek.chat.beta-prefix-path	测试版 API 端点的前缀路径。	/beta
+#  spring.ai.deepseek.chat.api-key	(可选) 聊天模型的专用 API Key，会覆盖通用配置。	-
+#  spring.ai.retry.max-attempts	最大重试次数。	10
+#  spring.ai.retry.backoff.initial-interval	初始重试退避间隔。	2 秒
+#  spring.ai.retry.backoff.multiplier	退避间隔的乘数因子。	5
+#  spring.ai.retry.backoff.max-interval	最大退避间隔。	3 分钟
+#  spring.ai.retry.on-client-errors	为 false 时，不对 4xx 客户端错误重试。	false
 
 server:
   # Server port configuration
@@ -42,3 +96,5 @@ timemark:
       - review
       - question
       - admin_log
+  search:
+    base-url: ${SEARCH_BASE_URL:https://cn.bing.com}

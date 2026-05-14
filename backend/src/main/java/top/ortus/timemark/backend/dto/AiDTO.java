@@ -1,12 +1,13 @@
 package top.ortus.timemark.backend.dto;
 
+import org.springframework.beans.factory.annotation.Value;
+
 public class AiDTO {
-    public String content;
-    public String model;
+    private String content;
+    @Value("${spring.ai.deepseek.chat.options.model}") private String model;
 
     public AiDTO() {
-        content = "We haven't got any content yet!";
-        model = "deepseek-v4-flash";
+        this.content = "We haven't got any content yet!";
     }
 
     public String getModel() {
@@ -23,5 +24,9 @@ public class AiDTO {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getModelName() {
+        return model;
     }
 }

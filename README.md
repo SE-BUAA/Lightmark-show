@@ -1,5 +1,3 @@
-以下是一个整合了前端、后端、数据库设计及技术选型的完整 GitHub 项目介绍 README，并按要求添加了两个 Skill 链接。
-
 # 拾光旅行 Lightmark
 
 > 一站式在线旅游平台，涵盖机票、酒店、火车票、度假产品预订，以及智能行程规划、社区互动、AI 助手等功能。前后端分离，响应式 Web 设计，一套代码适配 PC / 平板 / 手机。
@@ -71,31 +69,31 @@
 
 ### 前端 (Vue 3)
 
-frontend/
-├── src/
-│   ├── api/              # API 接口（按业务拆分）
-│   ├── assets/styles/    # 全局样式（暗色主题、按钮、admin）
-│   ├── components/       # 公共组件（Header/Footer/ThemeToggle）
-│   ├── layouts/          # 布局（AdminLayout）
-│   ├── router/           # 路由 + 导航守卫
-│   ├── stores/           # Pinia 状态（auth）
-│   ├── utils/            # request 拦截器、auth 工具
-│   └── views/            # 页面视图（auth/admin/module）
-└── ...
+frontend/            
+├── src/  
+│   ├── api/              # API 接口（按业务拆分）  
+│   ├── assets/styles/    # 全局样式（暗色主题、按钮、admin）  
+│   ├── components/       # 公共组件（Header/Footer/ThemeToggle）  
+│   ├── layouts/          # 布局（AdminLayout）  
+│   ├── router/           # 路由 + 导航守卫  
+│   ├── stores/           # Pinia 状态（auth）  
+│   ├── utils/            # request 拦截器、auth 工具   
+│   └── views/            # 页面视图（auth/admin/module）  
+└── ...  
 
-### 后端 (Spring Boot)
+### 后端 (Spring Boot)  
 
-backend/
-├── src/main/java/top/ortus/timemark/backend/
-│   ├── controller/       # REST 控制器（Auth/User/Admin/Crud/Module）
-│   ├── service/          # 业务逻辑
-│   ├── dao/              # MyBatis-Plus Mapper + 实体
-│   ├── dto/              # 请求/响应 DTO
-│   ├── config/           # WebConfig、数据库属性配置
-│   ├── security/         # JWT、AdminAuthInterceptor
-│   ├── exception/        # 全局异常处理
-│   └── converter/        # 实体-DTO 转换
-└── resources/            # application.yaml, SQL 脚本
+backend/  
+├── src/main/java/top/ortus/timemark/backend/  
+│   ├── controller/       # REST 控制器（Auth/User/Admin/Crud/Module）  
+│   ├── service/          # 业务逻辑  
+│   ├── dao/              # MyBatis-Plus Mapper + 实体  
+│   ├── dto/              # 请求/响应 DTO  
+│   ├── config/           # WebConfig、数据库属性配置  
+│   ├── security/         # JWT、AdminAuthInterceptor  
+│   ├── exception/        # 全局异常处理  
+│   └── converter/        # 实体-DTO 转换  
+└── resources/            # application.yaml, SQL 脚本  
 
 ## 快速开始
 
