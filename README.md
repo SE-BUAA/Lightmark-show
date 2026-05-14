@@ -92,6 +92,7 @@ backend/
 │   ├── config/           # WebConfig、数据库属性配置  
 │   ├── security/         # JWT、AdminAuthInterceptor  
 │   ├── exception/        # 全局异常处理  
+│   ├── exception/        # ai工具调用  
 │   └── converter/        # 实体-DTO 转换  
 └── resources/            # application.yaml, SQL 脚本  
 
@@ -139,9 +140,10 @@ npm run serve
 ### 5. 访问应用
 
 - 用户端：`http://localhost:8081`
-- 管理后台：`http://localhost:8081/admin/login`（默认管理员账号 `admin@lightmark.com` / `123456`）
+- 管理后台：`http://localhost:8081/admin/login`（默认管理员账号 `aaa` / `aaa`）
 
-## AI 集成
+## AI 集成  
+AI配置：在你的本地环境变量配置DEEP_API_KEY，在https://platform.deepseek.com/生成api输入即可
 
 ## Skill 提示词
 
