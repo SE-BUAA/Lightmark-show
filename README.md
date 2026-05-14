@@ -92,7 +92,7 @@ backend/
 │   ├── config/           # WebConfig、数据库属性配置  
 │   ├── security/         # JWT、AdminAuthInterceptor  
 │   ├── exception/        # 全局异常处理  
-│   ├── exception/        # ai工具调用  
+│   ├── tools/        # ai工具调用  
 │   └── converter/        # 实体-DTO 转换  
 └── resources/            # application.yaml, SQL 脚本  
 
