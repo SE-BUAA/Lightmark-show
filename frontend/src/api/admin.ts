@@ -236,7 +236,7 @@ export const refundOrder = (
 
 /** GET /api/admin/logs — 管理员操作日志 */
 export const getAdminLogs = (params?: {
-  adminId?: number;
+  admin_id?: number;
   operation?: string;
   result?: string;
 }): Promise<PageResponse<AdminLogDTO>> => {

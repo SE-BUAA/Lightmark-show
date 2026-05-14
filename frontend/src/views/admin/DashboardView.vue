@@ -131,23 +131,35 @@ const resizeChart = () => chart?.resize();
 
 onMounted(async () => {
   loading.value = true;
+
+  // 逐个请求，互不阻塞；某个接口失败不影响其他数据展示
   try {
-    const [summaryData, trends, hot] = await Promise.all([
-      getDashboardSummary(),
-      getDashboardTrends(),
-      getHotProducts(),
-    ]);
+    const summaryData = await getDashboardSummary();
     summary.totalUsers = summaryData.totalUsers ?? 0;
     summary.totalOrders = summaryData.totalOrders ?? 0;
     summary.totalRevenue = summaryData.totalRevenue ?? 0;
-    hotProducts.value = hot ?? [];
+  } catch {
+    // 概要接口失败，保持默认值 0
+  }
 
+  try {
+    const trends = await getDashboardTrends();
     await nextTick();
     renderChart(trends ?? []);
-    window.addEventListener("resize", resizeChart);
-  } finally {
-    loading.value = false;
+  } catch {
+    // 趋势接口失败，不渲染图表
   }
+
+  window.addEventListener("resize", resizeChart);
+
+  try {
+    const hot = await getHotProducts();
+    hotProducts.value = hot ?? [];
+  } catch {
+    // 热门产品接口失败，展示「暂无数据」
+  }
+
+  loading.value = false;
 });
 
 onBeforeUnmount(() => {

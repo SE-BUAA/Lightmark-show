@@ -14,8 +14,8 @@ import { getAuthSnapshot } from "@/utils/auth";
 interface ApiResponse<T> {
   /** 业务状态码，0表示成功 */
   code: number;
-  /** 错误消息 */
-  errorMsg: string;
+  /** 状态描述，成功时为 "success" */
+  msg: string;
   /** 响应数据体 */
   data: T;
 }
@@ -55,8 +55,8 @@ request.interceptors.response.use(
 
     // 检查业务状态码，如果不是0（表示失败）则显示错误消息
     if (payload.code !== 0) {
-      ElMessage.error(payload.errorMsg || "请求失败");
-      return Promise.reject(new Error(payload.errorMsg || "Request failed"));
+      ElMessage.error(payload.msg || "请求失败");
+      return Promise.reject(new Error(payload.msg || "Request failed"));
     }
 
     // 返回成功数据
@@ -66,7 +66,7 @@ request.interceptors.response.use(
   (error: AxiosError) => {
     // 从错误响应中提取错误消息，优先使用API返回的消息，否则使用通用错误消息
     const message =
-      (error.response?.data as { errorMsg?: string } | undefined)?.errorMsg ||
+      (error.response?.data as { msg?: string } | undefined)?.msg ||
       error.message ||
       "网络异常";
     // 显示错误消息给用户
