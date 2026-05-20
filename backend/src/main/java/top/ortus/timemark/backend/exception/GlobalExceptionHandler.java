@@ -6,6 +6,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import top.ortus.timemark.backend.common.ApiResponse;
 
 /**
@@ -48,6 +49,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理静态资源找不到异常（例如 favicon.ico）
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleNoResourceFound(NoResourceFoundException ex) {
+        return ApiResponse.error(404, "resource not found");
+    }
+
+    /**
      * 处理通用异常
      * @param ex 异常
      * @return 错误响应
@@ -55,6 +65,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneric(Exception ex) {
-        return ApiResponse.error(500, "internal error");
+        ex.printStackTrace();
+        return ApiResponse.error(500, ex.getMessage() != null ? ex.getMessage() : "internal error");
     }
 }
