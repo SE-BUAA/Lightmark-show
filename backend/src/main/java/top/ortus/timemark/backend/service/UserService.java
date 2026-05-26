@@ -58,4 +58,6 @@ public interface UserService {
      * @return 是否删除成功
      */
     boolean delete(String id);
+
+    boolean updatePassword(String id, String oldPassword, String newPassword);
 }

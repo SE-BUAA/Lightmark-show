@@ -1,12 +1,14 @@
 package top.ortus.timemark.backend.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import top.ortus.timemark.backend.converter.UserConverter;
 import top.ortus.timemark.backend.dao.User;
 import top.ortus.timemark.backend.dao.UserRepositoryImpl;
 import top.ortus.timemark.backend.dto.UserDTO;
 import top.ortus.timemark.backend.dto.user.UserCreateRequest;
 import top.ortus.timemark.backend.dto.user.UserUpdateRequest;
+import top.ortus.timemark.backend.exception.ApiException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +20,7 @@ import java.util.List;
 public class UserServiceImpl implements UserService {
 
     private final UserRepositoryImpl userRepositoryImpl;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
      * 构造函数
@@ -121,6 +124,29 @@ public class UserServiceImpl implements UserService {
     @Override
     public boolean delete(String id) {
         return userRepositoryImpl.softDeleteById(id) > 0;
+    }
+
+    @Override
+    public boolean updatePassword(String id, String oldPassword, String newPassword) {
+        if (id == null || id.isBlank() || "0".equals(id)) {
+            throw new ApiException(401, "unauthorized");
+        }
+        if (oldPassword == null || oldPassword.isBlank() || newPassword == null || newPassword.isBlank()) {
+            throw new ApiException(400, "invalid request");
+        }
+        User user;
+        try {
+            user = userRepositoryImpl.findById(id);
+        } catch (Exception ex) {
+            throw new ApiException(404, "user not found");
+        }
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new ApiException(400, "old password incorrect");
+        }
+        UserUpdateRequest req = new UserUpdateRequest();
+        req.setPassword(passwordEncoder.encode(newPassword));
+        update(id, req);
+        return true;
     }
 
     /**

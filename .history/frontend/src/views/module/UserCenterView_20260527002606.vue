@@ -477,11 +477,18 @@ const removeTraveler = async (t: any) => {
       cancelButtonText: "取消",
       type: "warning",
     });
+    // 如果用户点了确定，就会继续往下走
     await deleteTraveler(Number(t.id));
     await fetchTravelers();
     ElMessage.success("已删除");
-  } catch {
-    // TODO
+  } catch (error) {
+    // 区分是用户取消了，还是真正的系统报错
+    if (error === 'cancel') {
+      ElMessage.info("已取消删除"); // 用户正常取消，给个温和的提示（也可以什么都不写）
+    } else {
+      console.error("删除出行人异常:", error);
+      ElMessage.error("删除失败，请稍后重试"); // 真正的报错，给红色的错误提示
+    }
   }
 };
 

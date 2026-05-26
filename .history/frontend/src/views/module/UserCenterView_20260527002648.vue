@@ -480,8 +480,7 @@ const removeTraveler = async (t: any) => {
     await deleteTraveler(Number(t.id));
     await fetchTravelers();
     ElMessage.success("已删除");
-  } catch {
-    // TODO
+  } catch {// TODO
   }
 };
 

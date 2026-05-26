@@ -2,6 +2,8 @@ package top.ortus.timemark.backend.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.dto.AiDTO;
+import top.ortus.timemark.backend.dto.chat.ChatContextDTO;
 import top.ortus.timemark.backend.dto.chat.ChatRequest;
 import top.ortus.timemark.backend.dto.chat.RegionCompleteRequest;
 import top.ortus.timemark.backend.dto.chat.StreamChatRequest;
@@ -28,7 +31,7 @@ public class ConversationController {
     // 非流式聊天
     @PostMapping("")
     public ApiResponse<AiDTO> chat(@RequestBody ChatRequest req) {
-        AiDTO aiDTO = conversationService.chat(req.getSessionId(), req.getMessage());
+        AiDTO aiDTO = conversationService.chat(req.getSessionId(), req.getMessage(), req.getSystemPrompt());
         return ApiResponse.ok(aiDTO);
     }
 
@@ -46,5 +49,14 @@ public class ConversationController {
         conversationService.streamChat(req.getSessionId(), req.getMessage(), emitter);
         return emitter;
     }
-}
 
+    @GetMapping("/context/{sessionId}")
+    public ApiResponse<ChatContextDTO> getContext(@PathVariable String sessionId) {
+        return ApiResponse.ok(conversationService.getContext(sessionId));
+    }
+
+    @PostMapping("/context/{sessionId}/reset")
+    public ApiResponse<Boolean> resetContext(@PathVariable String sessionId) {
+        return ApiResponse.ok(conversationService.resetContext(sessionId));
+    }
+}

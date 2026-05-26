@@ -76,11 +76,10 @@ public class UserController {
     @PutMapping("/password")
     public ApiResponse<Boolean> updatePassword(@RequestHeader("Authorization") String authorization,
                                                @RequestBody UserPasswordUpdateRequest request) {
-        resolveUserId(authorization);
-        if (request == null || request.getOldPassword() == null || request.getNewPassword() == null) {
+        if (request == null) {
             return ApiResponse.error(400, "invalid request");
         }
-        return ApiResponse.ok(true);
+        return ApiResponse.ok(userService.updatePassword(resolveUserId(authorization), request.getOldPassword(), request.getNewPassword()));
     }
 
     @GetMapping("/travelers")

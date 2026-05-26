@@ -32,37 +32,49 @@ export interface UserUpdateRequest {
 
 /** 出行人DTO */
 export interface TravelerDTO {
-  id?: number;
+  id?: string;
   name: string;
-  idCard: string;
+  id_card: string;
   phone?: string;
+  id_type?: number;
+  create_time?: string;
 }
 
 /** 积分记录DTO */
 export interface PointsLogDTO {
-  id: number;
-  points: number;
-  type: string;
-  remark: string;
-  createTime: string;
+  id: string;
+  user_id?: string;
+  type: number;
+  amount: number;
+  source?: string;
+  order_id?: string;
+  create_time?: string;
 }
 
 /** 等级升级信息DTO */
 export interface UserLevelUpgradeInfoDTO {
-  currentLevel: number;
-  currentPoints: number;
-  nextLevel: number;
-  pointsToNext: number;
+  level: number;
+  pointsNeeded: number;
+  benefits: string[];
 }
 
 /** 订单DTO（概要） */
 export interface OrderDTO {
-  orderNo: string;
-  orderType: string;
-  productName: string;
-  payAmount: number;
+  id?: string;
+  order_no: string;
+  user_id?: string;
+  order_type: string;
+  total_amount?: number;
+  points_deduct?: number;
+  pay_amount: number;
+  payment_method?: string;
+  source?: string;
   status: number;
-  createTime: string;
+  pay_deadline?: string;
+  pay_time?: string;
+  cancel_reason?: string;
+  create_time?: string;
+  update_time?: string;
 }
 
 /** 分页响应 */
@@ -135,7 +147,7 @@ export const addTraveler = (data: TravelerDTO): Promise<TravelerDTO> => {
  * PUT /api/user/travelers/{id}
  */
 export const updateTraveler = (
-  id: number,
+  id: number | string,
   data: TravelerDTO
 ): Promise<TravelerDTO> => {
   return http.put<TravelerDTO>(`/user/travelers/${id}`, data);
