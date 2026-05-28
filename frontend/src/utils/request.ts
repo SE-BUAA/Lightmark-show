@@ -70,9 +70,8 @@ request.interceptors.response.use(
       error.message ||
       "网络异常";
     // 显示错误消息给用户
-    ElMessage.error(message);
     // 返回拒绝的Promise，让调用方可以处理错误
-    return Promise.reject(error);
+    return Promise.reject(new Error(message));
   }
 );
 

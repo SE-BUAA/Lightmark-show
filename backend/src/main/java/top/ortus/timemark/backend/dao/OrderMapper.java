@@ -18,6 +18,12 @@ public interface OrderMapper extends BaseMapper<Order> {
     @Update("UPDATE orders SET status = 2, cancel_reason = #{reason}, update_time = NOW() WHERE order_no = #{orderNo} AND status = 0")
     int cancelPendingOrder(@Param("orderNo") String orderNo, @Param("reason") String reason);
 
+    @Update("UPDATE orders SET status = 4, cancel_reason = #{reason}, update_time = NOW() WHERE order_no = #{orderNo} AND status = 1")
+    int refundPaidOrder(@Param("orderNo") String orderNo, @Param("reason") String reason);
+
+    @Update("UPDATE orders SET status = 5, pickup_code = NULL, changed_once = 1, cancel_reason = #{reason}, update_time = NOW() WHERE order_no = #{orderNo} AND status = 1 AND COALESCE(changed_once, 0) = 0")
+    int markChangedOrder(@Param("orderNo") String orderNo, @Param("reason") String reason);
+
     @Select("SELECT COUNT(1) FROM orders WHERE order_no = #{orderNo}")
     int countByOrderNo(@Param("orderNo") String orderNo);
 

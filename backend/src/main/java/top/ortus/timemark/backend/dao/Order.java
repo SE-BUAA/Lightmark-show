@@ -31,6 +31,8 @@ public class Order {
     private LocalDateTime payTime;
     private String cancelReason;
     private String pickupCode;
+    private Integer changedOnce;
+    private String originalOrderNo;
     
     // 扩展字段，记录车次座位乘车人等信息
     private String extraInfo; 

@@ -42,6 +42,34 @@ export interface TrainOrderResponse {
   pickupCode?: string
 }
 
+export interface TrainRefundResponse {
+  orderNo: string
+  status: number
+  paidAmount: number
+  refundAmount: number
+  refundRule: string
+}
+
+export interface TrainChangePreviewResponse {
+  orderNo: string
+  trainName: string
+  startStation: string
+  endStation: string
+  seatType: string
+  candidates: TrainProduct[]
+}
+
+export interface TrainChangeResponse {
+  oldOrderNo: string
+  newOrderNo: string
+  pickupCode: string
+  oldPayAmount: number
+  newPayAmount: number
+  differenceAmount: number
+  differenceType: 'PAY' | 'REFUND' | 'NONE'
+  message: string
+}
+
 export interface TrainOrderDetail {
   orderNo: string
   status: number
@@ -65,6 +93,29 @@ export function createTrainOrder(data: TrainOrderPayload) {
 
 export function payOrder(orderNo: string) {
   return http.post<TrainOrderResponse>(`/orders/train/${orderNo}/pay`)
+}
+
+export function refundTrainOrder(orderNo: string) {
+  return http.post<TrainRefundResponse>(`/orders/train/${orderNo}/refund`)
+}
+
+export function refundTrainOrderByPickupCode(pickupCode: string) {
+  return http.post<TrainRefundResponse>('/orders/train/refund', undefined, {
+    params: { pickupCode }
+  })
+}
+
+export function previewTrainChange(pickupCode: string) {
+  return http.get<TrainChangePreviewResponse>('/orders/train/change', {
+    params: { pickupCode }
+  })
+}
+
+export function changeTrainOrder(pickupCode: string, targetProductId: string) {
+  return http.post<TrainChangeResponse>('/orders/train/change', {
+    pickupCode,
+    targetProductId
+  })
 }
 
 export function getOrder(orderNo: string) {

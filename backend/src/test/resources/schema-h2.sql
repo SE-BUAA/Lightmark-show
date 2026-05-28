@@ -34,6 +34,7 @@ CREATE TABLE product (
   category_tags JSON,
   extra JSON,
   status TINYINT DEFAULT 1,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -52,6 +53,8 @@ CREATE TABLE orders (
   pay_time TIMESTAMP,
   cancel_reason VARCHAR(255),
   pickup_code VARCHAR(6),
+  changed_once TINYINT DEFAULT 0,
+  original_order_no VARCHAR(32),
   extra_info VARCHAR(2000),
   create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP

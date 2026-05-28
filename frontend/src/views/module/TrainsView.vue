@@ -1,11 +1,71 @@
 <template>
   <div class="module-page">
+    <el-dialog v-model="showChangeCodeDialog" title="改签" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="取票码">
+          <el-input v-model="changePickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeChangeCode" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showChangeCodeDialog = false">取消</el-button>
+        <el-button type="primary" :loading="changePreviewLoading" @click="handlePreviewChange">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showChangeListDialog" title="选择改签车次" width="820px">
+      <el-alert
+        v-if="changePreview"
+        class="change-alert"
+        :closable="false"
+        type="info"
+        :title="`${changePreview.startStation} - ${changePreview.endStation}，原车次 ${changePreview.trainName}，座位 ${changePreview.seatType}`"
+      />
+      <el-table v-if="changePreview?.candidates.length" :data="changePreview.candidates" stripe>
+        <el-table-column prop="name" label="车次" min-width="100" />
+        <el-table-column label="日期" min-width="110">
+          <template #default="{ row }">{{ row.extra?.date }}</template>
+        </el-table-column>
+        <el-table-column label="时间" min-width="140">
+          <template #default="{ row }">{{ row.extra?.depart_time }} - {{ row.extra?.arrive_time }}</template>
+        </el-table-column>
+        <el-table-column label="价格" min-width="90">
+          <template #default="{ row }">￥{{ row.price }}</template>
+        </el-table-column>
+        <el-table-column label="余票" min-width="80">
+          <template #default="{ row }">{{ availableTickets(row) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" :loading="changeSubmitLoading" @click="handleChangeTrain(row)">选择</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无可改签车次" />
+    </el-dialog>
+
+    <el-dialog v-model="showChangeResultDialog" title="改签成功" width="480px">
+      <el-result icon="success" title="改签成功" :sub-title="changeResult?.message" />
+      <el-descriptions v-if="changeResult" :column="1" border>
+        <el-descriptions-item label="原订单号">{{ changeResult.oldOrderNo }}</el-descriptions-item>
+        <el-descriptions-item label="新订单号">{{ changeResult.newOrderNo }}</el-descriptions-item>
+        <el-descriptions-item label="新取票码">{{ changeResult.pickupCode }}</el-descriptions-item>
+        <el-descriptions-item label="新票金额">￥{{ changeResult.newPayAmount }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button type="primary" @click="showChangeResultDialog = false">确定</el-button>
+      </template>
+    </el-dialog>
+
     <section class="module-hero">
       <div class="container hero-inner">
         <span class="module-icon">火车票</span>
         <h1 class="section-title">火车票</h1>
         <p class="section-subtitle">按站点、日期、车次类型和座位类型筛选，完成下单与模拟支付。</p>
-        <el-button type="primary" size="large" @click="openSearchDialog">购票</el-button>
+        <div class="hero-actions">
+          <el-button type="primary" size="large" @click="openSearchDialog">购票</el-button>
+          <el-button size="large" @click="openRefundDialog">退票</el-button>
+          <el-button size="large" @click="openChangeDialog">改签</el-button>
+        </div>
       </div>
     </section>
 
@@ -73,6 +133,18 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="showRefundDialog" title="退票" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="取票码">
+          <el-input v-model="refundPickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeRefundCode" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRefundDialog = false">取消</el-button>
+        <el-button type="warning" :loading="refundCodeLoading" @click="handleRefundByPickupCode">提交</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showOrderDialog" title="填写购票人信息" width="520px">
       <el-form ref="orderFormRef" :model="orderForm" :rules="orderRules" label-width="90px">
         <el-form-item label="姓名" prop="passengerName">
@@ -118,6 +190,10 @@
       <div class="ticket-code">
         <el-result icon="success" title="订票成功" sub-title="请妥善保存取票码" />
         <div class="code-box">{{ ticketCode }}</div>
+        <div class="ticket-actions">
+          <el-button @click="showTicketDialog = false">关闭</el-button>
+          <el-button type="warning" :loading="refundLoading" @click="handleRefundOrder">退票</el-button>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -127,8 +203,19 @@
 import { computed, onUnmounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { cancelOrder, createTrainOrder, getOrder, getTrainOptions, payOrder, searchTrains } from '@/api/train'
-import type { TrainOptions, TrainProduct } from '@/api/train'
+import {
+  changeTrainOrder,
+  cancelOrder,
+  createTrainOrder,
+  getOrder,
+  getTrainOptions,
+  payOrder,
+  previewTrainChange,
+  refundTrainOrder,
+  refundTrainOrderByPickupCode,
+  searchTrains
+} from '@/api/train'
+import type { TrainChangePreviewResponse, TrainChangeResponse, TrainOptions, TrainProduct } from '@/api/train'
 import { useTrainStore } from '@/stores/train'
 
 const trainStore = useTrainStore()
@@ -139,12 +226,24 @@ const showSearchDialog = ref(false)
 const showOrderDialog = ref(false)
 const showPayDialog = ref(false)
 const showTicketDialog = ref(false)
+const showRefundDialog = ref(false)
+const showChangeCodeDialog = ref(false)
+const showChangeListDialog = ref(false)
+const showChangeResultDialog = ref(false)
 const searchLoading = ref(false)
 const orderLoading = ref(false)
 const payLoading = ref(false)
 const cancelLoading = ref(false)
+const refundLoading = ref(false)
+const refundCodeLoading = ref(false)
+const changePreviewLoading = ref(false)
+const changeSubmitLoading = ref(false)
 const hasSearched = ref(false)
 const ticketCode = ref('')
+const refundPickupCode = ref('')
+const changePickupCode = ref('')
+const changePreview = ref<TrainChangePreviewResponse | null>(null)
+const changeResult = ref<TrainChangeResponse | null>(null)
 const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
@@ -213,6 +312,80 @@ const openSearchDialog = async () => {
     options.dates = data.dates || []
   } catch {
     ElMessage.warning('筛选项加载失败，请稍后重试')
+  }
+}
+
+const openRefundDialog = () => {
+  refundPickupCode.value = ''
+  showRefundDialog.value = true
+}
+
+const normalizeRefundCode = () => {
+  refundPickupCode.value = refundPickupCode.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+const openChangeDialog = () => {
+  changePickupCode.value = ''
+  changePreview.value = null
+  changeResult.value = null
+  showChangeCodeDialog.value = true
+}
+
+const normalizeChangeCode = () => {
+  changePickupCode.value = changePickupCode.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+const handlePreviewChange = async () => {
+  normalizeChangeCode()
+  if (!/^[A-Z0-9]{6}$/.test(changePickupCode.value)) {
+    ElMessage.warning('请输入6位取票码')
+    return
+  }
+  changePreviewLoading.value = true
+  try {
+    const result = await previewTrainChange(changePickupCode.value)
+    changePreview.value = result
+    showChangeCodeDialog.value = false
+    showChangeListDialog.value = true
+  } catch (error: unknown) {
+    ElMessage.error(errorMessage(error, '改签查询失败，请稍后重试'))
+  } finally {
+    changePreviewLoading.value = false
+  }
+}
+
+const handleChangeTrain = async (train: TrainProduct) => {
+  try {
+    await ElMessageBox.confirm('每张车票只能改签一次，确认后原订单和原取票码将不可用。是否继续？', '改签确认', {
+      confirmButtonText: '确认改签',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  changeSubmitLoading.value = true
+  try {
+    const result = await changeTrainOrder(changePickupCode.value, train.id)
+    changeResult.value = result
+    const message =
+      result.differenceType === 'PAY'
+        ? `需补差价：￥${result.differenceAmount}`
+        : result.differenceType === 'REFUND'
+          ? `已退差价：￥${result.differenceAmount}`
+          : '无需补差价'
+    await ElMessageBox.alert(`${message}。新订单号：${result.newOrderNo}，新取票码：${result.pickupCode}`, '改签订单', {
+      confirmButtonText: '确定',
+      type: 'success'
+    })
+    showChangeListDialog.value = false
+    showChangeResultDialog.value = true
+    await handleSearch()
+  } catch (error: unknown) {
+    ElMessage.error(errorMessage(error, '改签失败，请稍后重试'))
+  } finally {
+    changeSubmitLoading.value = false
   }
 }
 
@@ -333,6 +506,46 @@ const handleCancelOrder = async () => {
   }
 }
 
+const handleRefundOrder = async () => {
+  const currentOrder = trainStore.currentOrder
+  if (!currentOrder?.orderNo) return
+  const orderNo = currentOrder.orderNo
+  refundLoading.value = true
+  try {
+    const result = await refundTrainOrder(orderNo)
+    ElMessage.success(`${result.refundRule}，退款金额：￥${result.refundAmount}`)
+    showTicketDialog.value = false
+    trainStore.setCurrentOrder({
+      ...currentOrder,
+      status: result.status
+    })
+    await handleSearch()
+  } catch (error: unknown) {
+    ElMessage.error(errorMessage(error, '退票失败，请稍后重试'))
+  } finally {
+    refundLoading.value = false
+  }
+}
+
+const handleRefundByPickupCode = async () => {
+  normalizeRefundCode()
+  if (!/^[A-Z0-9]{6}$/.test(refundPickupCode.value)) {
+    ElMessage.warning('请输入6位取票码')
+    return
+  }
+  refundCodeLoading.value = true
+  try {
+    const result = await refundTrainOrderByPickupCode(refundPickupCode.value)
+    ElMessage.success(`${result.refundRule}，退款金额：￥${result.refundAmount}`)
+    showRefundDialog.value = false
+    await handleSearch()
+  } catch (error: unknown) {
+    ElMessage.error(errorMessage(error, '退票失败，请稍后重试'))
+  } finally {
+    refundCodeLoading.value = false
+  }
+}
+
 const handleTimeout = async () => {
   clearTimers()
   showPayDialog.value = false
@@ -370,6 +583,13 @@ onUnmounted(clearTimers)
   flex-direction: column;
   align-items: center;
   gap: 14px;
+}
+
+.hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .module-hero .section-title {
@@ -414,5 +634,16 @@ onUnmounted(clearTimers)
   font-size: 30px;
   font-weight: 700;
   letter-spacing: 4px;
+}
+
+.ticket-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.change-alert {
+  margin-bottom: 16px;
 }
 </style>

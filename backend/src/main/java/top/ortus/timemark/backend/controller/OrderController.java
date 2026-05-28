@@ -6,11 +6,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.dao.Order;
+import top.ortus.timemark.backend.dto.module.TrainChangeConfirmRequest;
+import top.ortus.timemark.backend.dto.module.TrainChangeResponse;
+import top.ortus.timemark.backend.dto.module.TrainChangePreviewResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
+import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
 import top.ortus.timemark.backend.service.OrderService;
 
 @RestController
@@ -29,6 +34,26 @@ public class OrderController {
     @PostMapping("/train/{orderNo}/pay")
     public ApiResponse<TrainOrderResponse> payOrder(@PathVariable String orderNo) {
         return ApiResponse.ok(orderService.payOrder(orderNo));
+    }
+
+    @PostMapping("/train/{orderNo}/refund")
+    public ApiResponse<TrainRefundResponse> refundTrainOrder(@PathVariable String orderNo) {
+        return ApiResponse.ok(orderService.refundTrainOrder(orderNo));
+    }
+
+    @PostMapping("/train/refund")
+    public ApiResponse<TrainRefundResponse> refundTrainOrderByPickupCode(@RequestParam String pickupCode) {
+        return ApiResponse.ok(orderService.refundTrainOrderByPickupCode(pickupCode));
+    }
+
+    @GetMapping("/train/change")
+    public ApiResponse<TrainChangePreviewResponse> previewTrainChange(@RequestParam String pickupCode) {
+        return ApiResponse.ok(orderService.previewTrainChange(pickupCode));
+    }
+
+    @PostMapping("/train/change")
+    public ApiResponse<TrainChangeResponse> changeTrainOrder(@RequestBody TrainChangeConfirmRequest request) {
+        return ApiResponse.ok(orderService.changeTrainOrder(request.getPickupCode(), request.getTargetProductId()));
     }
 
     @GetMapping("/{orderNo}")
