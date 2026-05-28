@@ -31,6 +31,8 @@ CREATE TABLE product (
   price DECIMAL(10,2) NOT NULL,
   stock INT DEFAULT 0,
   sold_count INT DEFAULT 0,
+  category_tags JSON,
+  extra JSON,
   status TINYINT DEFAULT 1,
   update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,10 +42,17 @@ CREATE TABLE orders (
   order_no VARCHAR(32) NOT NULL,
   user_id BIGINT NOT NULL,
   order_type VARCHAR(20) NOT NULL,
+  total_amount DECIMAL(10,2) NOT NULL,
+  points_deduct INT DEFAULT 0,
   pay_amount DECIMAL(10,2) NOT NULL,
   payment_method VARCHAR(20),
+  source VARCHAR(20) DEFAULT 'PC',
   status TINYINT DEFAULT 0,
+  pay_deadline TIMESTAMP,
+  pay_time TIMESTAMP,
   cancel_reason VARCHAR(255),
+  pickup_code VARCHAR(6),
+  extra_info VARCHAR(2000),
   create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
