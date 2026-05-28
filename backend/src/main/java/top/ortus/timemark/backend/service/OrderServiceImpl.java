@@ -15,6 +15,8 @@ import top.ortus.timemark.backend.dto.module.TrainChangeResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
+import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -85,6 +87,47 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public TrainOrderResponse createVacationOrder(Long userId, VacationOrderRequest request) {
+        validateVacationRequest(request);
+
+        Product product = productMapper.selectById(request.getProductId());
+        if (product == null || !"VACATION".equals(product.getProductType()) || !Integer.valueOf(1).equals(product.getStatus())) {
+            throw new IllegalArgumentException("度假产品不存在或已下架");
+        }
+
+        int travelerCount = request.getTravelerCount() == null ? 1 : request.getTravelerCount();
+        int updatedCount = orderMapper.decrementStock(request.getProductId(), travelerCount);
+        if (updatedCount == 0) {
+            throw new IllegalArgumentException("库存不足，下单失败");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        BigDecimal unitAmount = BigDecimal.valueOf(product.getPrice()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal baseAmount = unitAmount.multiply(BigDecimal.valueOf(travelerCount)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal insuranceAmount = Boolean.TRUE.equals(request.getCancellationInsurance())
+            ? baseAmount.multiply(BigDecimal.valueOf(0.05)).setScale(2, RoundingMode.HALF_UP)
+            : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        Order order = new Order();
+        order.setOrderNo(generateOrderNo());
+        order.setUserId(userId);
+        order.setOrderType("VACATION");
+        order.setTotalAmount(baseAmount);
+        order.setPayAmount(baseAmount.add(insuranceAmount).setScale(2, RoundingMode.HALF_UP));
+        order.setPointsDeduct(0);
+        order.setSource("PC");
+        order.setStatus(PENDING);
+        order.setPayDeadline(now.plusMinutes(10));
+        order.setExtraInfo(writeVacationExtraInfo(product, request, insuranceAmount));
+        order.setCreateTime(now);
+        order.setUpdateTime(now);
+        orderMapper.insert(order);
+
+        return toResponse(order);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public TrainOrderResponse payOrder(String orderNo) {
         Order order = getOrderByNo(orderNo);
         if (order == null) {
@@ -126,6 +169,58 @@ public class OrderServiceImpl implements OrderService {
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Order::getPickupCode, pickupCode);
         return refundTrainOrder(orderMapper.selectOne(wrapper));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public VacationRefundResponse refundVacationOrder(String orderNo) {
+        Order order = getOrderByNo(orderNo);
+        return refundVacationOrder(order);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public VacationRefundResponse refundVacationOrderByPickupCode(String pickupCode) {
+        if (pickupCode == null || !pickupCode.matches("^[A-Z0-9]{6}$")) {
+            throw new IllegalArgumentException("请输入6位取票码");
+        }
+        LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Order::getPickupCode, pickupCode);
+        return refundVacationOrder(orderMapper.selectOne(wrapper));
+    }
+
+    private VacationRefundResponse refundVacationOrder(Order order) {
+        if (order == null) {
+            throw new IllegalArgumentException("订单不存在");
+        }
+        if (!"VACATION".equals(order.getOrderType())) {
+            throw new IllegalArgumentException("只能退度假订单");
+        }
+        if (order.getStatus() == 4) {
+            throw new IllegalArgumentException("订单已退订");
+        }
+        if (order.getStatus() != PAID) {
+            throw new IllegalArgumentException("只有已支付订单可以退订");
+        }
+
+        Map<String, Object> extraInfo = readExtraInfo(order);
+        boolean insured = Boolean.parseBoolean(String.valueOf(extraInfo.get("cancellationInsurance")));
+        BigDecimal refundAmount = insured
+            ? order.getPayAmount()
+            : order.getPayAmount().multiply(BigDecimal.valueOf(0.5)).setScale(2, RoundingMode.HALF_UP);
+        String rule = insured ? "已购买取消险，全额退款" : "未购买取消险，退还50%";
+        String reason = rule + "，退款金额：" + refundAmount;
+
+        int changed = orderMapper.refundPaidOrder(order.getOrderNo(), reason);
+        if (changed == 0) {
+            throw new IllegalArgumentException("订单状态已变化，请刷新后重试");
+        }
+        String productId = valueOf(extraInfo.get("productId"));
+        int travelerCount = parseInt(extraInfo.get("travelerCount"), 1);
+        if (productId != null && !productId.isBlank()) {
+            orderMapper.incrementStock(productId, travelerCount);
+        }
+        return new VacationRefundResponse(order.getOrderNo(), 4, order.getPayAmount(), refundAmount, rule);
     }
 
     @Override
@@ -355,6 +450,46 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    private void validateVacationRequest(VacationOrderRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("请求参数不能为空");
+        }
+        if (request.getProductId() == null || request.getProductId().isBlank()) {
+            throw new IllegalArgumentException("度假产品不能为空");
+        }
+        if (request.getTravelerName() == null || request.getTravelerName().isBlank() || request.getTravelerName().length() > 30) {
+            throw new IllegalArgumentException("请填写1-30位出行人姓名");
+        }
+        if (request.getTravelerPhone() == null || !request.getTravelerPhone().matches("^1[3-9]\\d{9}$")) {
+            throw new IllegalArgumentException("请输入正确的中国大陆手机号");
+        }
+        if (request.getTravelerCount() == null || request.getTravelerCount() < 1 || request.getTravelerCount() > 20) {
+            throw new IllegalArgumentException("出行人数必须为1-20之间的正整数");
+        }
+    }
+
+    private String writeVacationExtraInfo(Product product, VacationOrderRequest request, BigDecimal insuranceAmount) {
+        Map<String, Object> extraInfo = new LinkedHashMap<>();
+        extraInfo.put("productId", request.getProductId());
+        extraInfo.put("vacationName", product.getName());
+        extraInfo.put("destination", product.getExtra() == null ? null : product.getExtra().get("destination"));
+        extraInfo.put("departCity", product.getExtra() == null ? null : product.getExtra().get("depart_city"));
+        extraInfo.put("date", product.getExtra() == null ? null : product.getExtra().get("date"));
+        extraInfo.put("days", product.getExtra() == null ? null : product.getExtra().get("days"));
+        extraInfo.put("hotelLevel", product.getExtra() == null ? null : product.getExtra().get("hotel_level"));
+        extraInfo.put("travelerName", request.getTravelerName());
+        extraInfo.put("travelerPhone", request.getTravelerPhone());
+        extraInfo.put("travelerCount", request.getTravelerCount());
+        extraInfo.put("cancellationInsurance", Boolean.TRUE.equals(request.getCancellationInsurance()));
+        extraInfo.put("insuranceAmount", insuranceAmount);
+        extraInfo.put("unitPrice", product.getPrice());
+        try {
+            return objectMapper.writeValueAsString(extraInfo);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("度假订单信息序列化失败");
+        }
+    }
+
     private String readProductId(Order order) {
         if (order.getExtraInfo() == null || order.getExtraInfo().isBlank()) {
             return null;
@@ -443,6 +578,17 @@ public class OrderServiceImpl implements OrderService {
             return discountRate == null ? 1.0 : Double.parseDouble(String.valueOf(discountRate));
         } catch (NumberFormatException ex) {
             return 1.0;
+        }
+    }
+
+    private int parseInt(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? fallback : Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return fallback;
         }
     }
 

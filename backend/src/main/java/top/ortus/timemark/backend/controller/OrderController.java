@@ -16,6 +16,8 @@ import top.ortus.timemark.backend.dto.module.TrainChangePreviewResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
+import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
 import top.ortus.timemark.backend.service.OrderService;
 
 @RestController
@@ -31,6 +33,12 @@ public class OrderController {
         return ApiResponse.ok(orderService.createTrainOrder(userId, request));
     }
 
+    @PostMapping("/vacation")
+    public ApiResponse<TrainOrderResponse> createVacationOrder(@RequestBody VacationOrderRequest request) {
+        Long userId = 2L;
+        return ApiResponse.ok(orderService.createVacationOrder(userId, request));
+    }
+
     @PostMapping("/train/{orderNo}/pay")
     public ApiResponse<TrainOrderResponse> payOrder(@PathVariable String orderNo) {
         return ApiResponse.ok(orderService.payOrder(orderNo));
@@ -44,6 +52,16 @@ public class OrderController {
     @PostMapping("/train/refund")
     public ApiResponse<TrainRefundResponse> refundTrainOrderByPickupCode(@RequestParam String pickupCode) {
         return ApiResponse.ok(orderService.refundTrainOrderByPickupCode(pickupCode));
+    }
+
+    @PostMapping("/vacation/{orderNo}/refund")
+    public ApiResponse<VacationRefundResponse> refundVacationOrder(@PathVariable String orderNo) {
+        return ApiResponse.ok(orderService.refundVacationOrder(orderNo));
+    }
+
+    @PostMapping("/vacation/refund")
+    public ApiResponse<VacationRefundResponse> refundVacationOrderByPickupCode(@RequestParam String pickupCode) {
+        return ApiResponse.ok(orderService.refundVacationOrderByPickupCode(pickupCode));
     }
 
     @GetMapping("/train/change")

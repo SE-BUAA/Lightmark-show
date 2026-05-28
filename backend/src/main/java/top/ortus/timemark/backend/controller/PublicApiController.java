@@ -96,17 +96,17 @@ public class PublicApiController {
         return ApiResponse.ok(new OrderDTO());
     }
 
-    @GetMapping("/vacations/search")
+    @GetMapping("/legacy/vacations/search")
     public ApiResponse<PageResponse<ProductDTO>> vacationSearch(@RequestParam Map<String, String> params) {
         return ApiResponse.ok(emptyPage());
     }
 
-    @GetMapping("/vacations/{productId}")
+    @GetMapping("/legacy/vacations/{productId}")
     public ApiResponse<ProductDTO> vacationDetail(@PathVariable String productId) {
         return ApiResponse.ok(new ProductDTO());
     }
 
-    @PostMapping("/vacations/order")
+    @PostMapping("/legacy/vacations/order")
     public ApiResponse<OrderDTO> vacationOrder(@RequestBody Map<String, Object> payload) {
         return ApiResponse.ok(new OrderDTO());
     }
