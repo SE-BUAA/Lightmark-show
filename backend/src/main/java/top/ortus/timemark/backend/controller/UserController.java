@@ -22,7 +22,9 @@ import top.ortus.timemark.backend.dto.user.UserCurrentDTO;
 import top.ortus.timemark.backend.dto.user.UserLevelUpgradeInfoDTO;
 import top.ortus.timemark.backend.dto.user.UserPasswordUpdateRequest;
 import top.ortus.timemark.backend.dto.user.UserUpdateRequest;
+import top.ortus.timemark.backend.exception.ApiException;
 import top.ortus.timemark.backend.service.GenericCrudService;
+import top.ortus.timemark.backend.service.MembershipService;
 import top.ortus.timemark.backend.service.UserService;
 import top.ortus.timemark.backend.security.UserIdentity;
 
@@ -40,15 +42,20 @@ public class UserController {
     private final UserService userService;
     private final GenericCrudService genericCrudService;
     private final JwtTokenService jwtTokenService;
+    private final MembershipService membershipService;
 
     /**
      * 构造函数
      * @param userService 用户服务
      */
-    public UserController(UserService userService, GenericCrudService genericCrudService, JwtTokenService jwtTokenService) {
+    public UserController(UserService userService,
+                          GenericCrudService genericCrudService,
+                          JwtTokenService jwtTokenService,
+                          MembershipService membershipService) {
         this.userService = userService;
         this.genericCrudService = genericCrudService;
         this.jwtTokenService = jwtTokenService;
+        this.membershipService = membershipService;
     }
 
     @GetMapping("/current")
@@ -76,11 +83,10 @@ public class UserController {
     @PutMapping("/password")
     public ApiResponse<Boolean> updatePassword(@RequestHeader("Authorization") String authorization,
                                                @RequestBody UserPasswordUpdateRequest request) {
-        resolveUserId(authorization);
-        if (request == null || request.getOldPassword() == null || request.getNewPassword() == null) {
+        if (request == null) {
             return ApiResponse.error(400, "invalid request");
         }
-        return ApiResponse.ok(true);
+        return ApiResponse.ok(userService.updatePassword(resolveUserId(authorization), request.getOldPassword(), request.getNewPassword()));
     }
 
     @GetMapping("/travelers")
@@ -126,8 +132,13 @@ public class UserController {
     }
 
     @GetMapping("/level/upgrade-info")
-    public ApiResponse<UserLevelUpgradeInfoDTO> levelUpgradeInfo() {
-        return ApiResponse.ok(new UserLevelUpgradeInfoDTO((short) 1, 0, List.of("VIP 折扣", "积分加成")));
+    public ApiResponse<UserLevelUpgradeInfoDTO> levelUpgradeInfo(@RequestHeader("Authorization") String authorization) {
+        String userId = resolveUserId(authorization);
+        if ("0".equals(userId)) {
+            throw new ApiException(401, "unauthorized");
+        }
+        UserDTO user = userService.findById(userId);
+        return ApiResponse.ok(membershipService.getUpgradeInfo(user));
     }
 
     @GetMapping("/orders")

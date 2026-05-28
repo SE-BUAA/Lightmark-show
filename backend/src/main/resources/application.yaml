@@ -80,6 +80,27 @@ timemark:
     secret: ${JWT_SECRET:timemark-secret-key-please-change}
     issuer: ${JWT_ISSUER:timemark}
     expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+  membership:
+    levels:
+      - level: 0
+        points-threshold: 0
+        benefits: []
+      - level: 1
+        points-threshold: 100
+        benefits:
+          - VIP 折扣
+          - 积分加成
+      - level: 2
+        points-threshold: 500
+        benefits:
+          - 更高折扣
+          - 专属客服
+      - level: 3
+        points-threshold: 1000
+        benefits:
+          - 最高折扣
+          - 专属客服
+          - 生日礼包
   database:
     # Database table definitions
     tables:

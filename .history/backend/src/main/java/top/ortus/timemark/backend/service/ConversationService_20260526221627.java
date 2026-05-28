@@ -89,7 +89,7 @@ public class ConversationService {
         List<ChatMessageDTO> items = new ArrayList<>();
         for (Message m : history) {
             String role = m.getMessageType() == null ? "" : m.getMessageType().name().toLowerCase();
-            items.add(new ChatMessageDTO(role, m.getText()));
+            items.add(new ChatMessageDTO(role, m.getContent()));
         }
         return new ChatContextDTO(systemPrompts.getOrDefault(safeSessionId, ""), items);
     }
