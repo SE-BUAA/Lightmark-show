@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.dao.Product;
+import top.ortus.timemark.backend.dto.module.VacationAiDetailResponse;
 import top.ortus.timemark.backend.dto.module.VacationOptionsResponse;
 import top.ortus.timemark.backend.dto.module.VacationSearchRequest;
 import top.ortus.timemark.backend.service.VacationService;
@@ -40,5 +41,10 @@ public class VacationController {
     @GetMapping("/{productId}")
     public ApiResponse<Product> searchById(@PathVariable("productId") Integer productId) {
         return ApiResponse.ok(vacationService.searchById(productId));
+    }
+
+    @GetMapping("/{productId}/detail-ai")
+    public ApiResponse<VacationAiDetailResponse> generateAiDetail(@PathVariable("productId") Integer productId) {
+        return ApiResponse.ok(vacationService.generateAiDetail(productId));
     }
 }

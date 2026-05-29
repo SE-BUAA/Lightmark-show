@@ -34,9 +34,12 @@
         <el-table-column label="余量" min-width="80">
           <template #default="{ row }">{{ availableStock(row) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" :disabled="availableStock(row) <= 0" @click="openConfirmDialog(row)">选择</el-button>
+            <div class="row-actions">
+              <el-button type="primary" :disabled="availableStock(row) <= 0" @click="openConfirmDialog(row)">选择</el-button>
+              <el-button :loading="detailLoadingId === row.id" @click="handleShowDetail(row)">详情</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -97,6 +100,17 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="showDetailDialog" title="度假产品详情" width="560px">
+      <el-skeleton v-if="detailLoading" :rows="4" animated />
+      <div v-else class="ai-detail">
+        <h3>{{ detailProductName }}</h3>
+        <p>{{ detailContent }}</p>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showDetailDialog = false">知道了</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showConfirmDialog" title="确认度假订单" width="560px">
       <el-descriptions v-if="vacationStore.selectedVacation" :column="1" border class="confirm-desc">
         <el-descriptions-item label="产品">{{ vacationStore.selectedVacation.name }}</el-descriptions-item>
@@ -144,10 +158,25 @@
 
     <el-dialog v-model="showSuccessDialog" title="预订成功" width="460px">
       <el-result icon="success" title="支付成功" sub-title="度假订单已确认" />
+      <div class="ticket-code">
+        <div class="code-label">取票码</div>
+        <div class="code-box">{{ vacationPickupCode }}</div>
+      </div>
       <div class="success-actions">
         <el-button @click="showSuccessDialog = false">关闭</el-button>
         <el-button type="warning" :loading="refundLoading" @click="handleRefundOrder">退订</el-button>
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="showAssistantDialog" title="智能行程助手" width="560px">
+      <el-skeleton v-if="assistantLoading" :rows="5" animated />
+      <div v-else class="ai-detail">
+        <h3>{{ assistantTitle }}</h3>
+        <p>{{ assistantContent }}</p>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showAssistantDialog = false">知道了</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -159,6 +188,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelVacationOrder,
   createVacationOrder,
+  generateVacationAssistant,
+  generateVacationDetail,
   getVacationOptions,
   getVacationOrder,
   payVacationOrder,
@@ -175,14 +206,24 @@ const showConfirmDialog = ref(false)
 const showPayDialog = ref(false)
 const showSuccessDialog = ref(false)
 const showRefundDialog = ref(false)
+const showDetailDialog = ref(false)
+const showAssistantDialog = ref(false)
 const searchLoading = ref(false)
 const orderLoading = ref(false)
 const payLoading = ref(false)
 const cancelLoading = ref(false)
 const refundLoading = ref(false)
 const refundCodeLoading = ref(false)
+const detailLoading = ref(false)
+const assistantLoading = ref(false)
+const detailLoadingId = ref('')
 const hasSearched = ref(false)
 const refundPickupCode = ref('')
+const vacationPickupCode = ref('')
+const detailProductName = ref('')
+const detailContent = ref('')
+const assistantTitle = ref('')
+const assistantContent = ref('')
 const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
@@ -292,6 +333,23 @@ const handleRefundByPickupCode = async () => {
   }
 }
 
+const handleShowDetail = async (product: VacationProduct) => {
+  detailProductName.value = product.name
+  detailContent.value = ''
+  showDetailDialog.value = true
+  detailLoading.value = true
+  detailLoadingId.value = product.id
+  try {
+    const result = await generateVacationDetail(product.id)
+    detailContent.value = result.content || '暂未生成详情文案，请稍后再试。'
+  } catch (error: unknown) {
+    detailContent.value = errorMessage(error, '详情生成失败，请稍后重试')
+  } finally {
+    detailLoading.value = false
+    detailLoadingId.value = ''
+  }
+}
+
 const openConfirmDialog = (product: VacationProduct) => {
   vacationStore.setSelectedVacation(product)
   orderForm.travelerName = ''
@@ -361,14 +419,43 @@ const handlePayOrder = async () => {
   try {
     const result = await payVacationOrder(orderNo)
     vacationStore.setCurrentOrder(result)
+    vacationPickupCode.value = result.pickupCode || ''
     showPayDialog.value = false
     showSuccessDialog.value = true
     clearTimers()
+    askForAssistant(result.orderNo)
   } catch (error: unknown) {
     ElMessage.error(errorMessage(error, '支付失败，请稍后重试'))
     await pollOrderStatus()
   } finally {
     payLoading.value = false
+  }
+}
+
+const askForAssistant = (orderNo: string) => {
+  ElMessageBox.confirm('是否需要智能行程助手建议？', '智能行程助手', {
+    confirmButtonText: '需要',
+    cancelButtonText: '暂不需要',
+    type: 'info'
+  })
+    .then(() => loadAssistant(orderNo))
+    .catch(() => undefined)
+}
+
+const loadAssistant = async (orderNo: string) => {
+  assistantTitle.value = '正在准备你的出行建议'
+  assistantContent.value = ''
+  assistantLoading.value = true
+  showAssistantDialog.value = true
+  try {
+    const result = await generateVacationAssistant(orderNo)
+    assistantTitle.value = `${result.destination || '目的地'} · ${result.date || '出行建议'}`
+    assistantContent.value = result.content || '暂未生成建议，请稍后再试。'
+  } catch (error: unknown) {
+    assistantTitle.value = '智能行程助手'
+    assistantContent.value = errorMessage(error, '行程建议生成失败，请稍后重试')
+  } finally {
+    assistantLoading.value = false
   }
 }
 
@@ -470,6 +557,17 @@ onUnmounted(clearTimers)
   width: 100%;
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.row-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
 .tag {
   margin: 2px 6px 2px 0;
 }
@@ -482,6 +580,43 @@ onUnmounted(clearTimers)
 
 .confirm-desc {
   margin-bottom: 18px;
+}
+
+.ticket-code {
+  margin: -8px 0 20px;
+  text-align: center;
+}
+
+.code-label {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.code-box {
+  display: inline-block;
+  min-width: 156px;
+  padding: 12px 18px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  color: var(--el-color-primary);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.ai-detail h3 {
+  margin: 0 0 12px;
+  color: var(--el-text-color-primary);
+  font-size: 18px;
+}
+
+.ai-detail p {
+  margin: 0;
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
+  white-space: pre-wrap;
 }
 
 .success-actions {
