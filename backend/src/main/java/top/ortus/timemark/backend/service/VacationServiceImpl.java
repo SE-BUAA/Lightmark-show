@@ -21,11 +21,17 @@ import top.ortus.timemark.backend.tools.UpdateNicknameTool;
 import top.ortus.timemark.backend.tools.WebSearchTool;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class VacationServiceImpl implements VacationService{
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
+
     @Autowired
     private ProductMapper productMapper;
 
@@ -130,7 +136,9 @@ public class VacationServiceImpl implements VacationService{
         queryWrapper.eq(Product::getProductType, "VACATION")
             .eq(Product::getStatus, 1)
             .orderByAsc(Product::getId);
-        return productMapper.selectList(queryWrapper);
+        List<Product> products = productMapper.selectList(queryWrapper);
+        products.forEach(this::normalizeVacationExtra);
+        return products;
     }
 
     private boolean matchesExtra(Product product, String key, String expected) {
@@ -172,11 +180,48 @@ public class VacationServiceImpl implements VacationService{
             return true;
         }
         Object value = product.getExtra() == null ? null : product.getExtra().get("days");
-        if (value == null) {
+        Integer days = normalizeDays(value);
+        if (days == null) {
             return false;
         }
-        int days = Integer.parseInt(String.valueOf(value));
         return (minDays == null || days >= minDays) && (maxDays == null || days <= maxDays);
+    }
+
+    private void normalizeVacationExtra(Product product) {
+        if (product == null || product.getExtra() == null) {
+            return;
+        }
+        Integer days = normalizeDays(product.getExtra().get("days"));
+        if (days == null) {
+            return;
+        }
+        Map<String, Object> normalizedExtra = new HashMap<>(product.getExtra());
+        normalizedExtra.put("days", days);
+        product.setExtra(normalizedExtra);
+    }
+
+    private Integer normalizeDays(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            int days = number.intValue();
+            return days > 0 ? days : null;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        Matcher matcher = NUMBER_PATTERN.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            int days = Integer.parseInt(matcher.group());
+            return days > 0 ? days : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private boolean matchesPrice(Product product, Double minPrice, Double maxPrice) {
