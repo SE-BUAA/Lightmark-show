@@ -320,6 +320,12 @@ import {
   updateCurrentUser,
   updateTraveler,
 } from "@/api/user";
+import type {
+  OrderDTO,
+  PointsLogDTO,
+  TravelerDTO,
+  UserLevelUpgradeInfoDTO,
+} from "@/api/user";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -351,10 +357,10 @@ const editForm = ref({
   email: "",
 });
 
-const travelers = ref<any[]>([]);
-const orders = ref<any[]>([]);
-const pointsLogs = ref<any[]>([]);
-const upgradeInfo = ref<any | null>(null);
+const travelers = ref<TravelerDTO[]>([]);
+const orders = ref<OrderDTO[]>([]);
+const pointsLogs = ref<PointsLogDTO[]>([]);
+const upgradeInfo = ref<UserLevelUpgradeInfoDTO | null>(null);
 
 const travelerDialogOpen = ref(false);
 const travelerSaving = ref(false);
@@ -429,7 +435,7 @@ const openCreateTraveler = () => {
   travelerDialogOpen.value = true;
 };
 
-const openEditTraveler = (t: any) => {
+const openEditTraveler = (t: TravelerDTO) => {
   travelerForm.value = {
     id: t.id || "",
     name: t.name || "",
@@ -470,7 +476,7 @@ const saveTraveler = async () => {
   }
 };
 
-const removeTraveler = async (t: any) => {
+const removeTraveler = async (t: TravelerDTO) => {
   try {
     await ElMessageBox.confirm("确定删除该出行人吗？", "提示", {
       confirmButtonText: "确定",
