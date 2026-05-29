@@ -6,9 +6,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import top.ortus.timemark.backend.JwtTokenService;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.common.PageResponse;
 import top.ortus.timemark.backend.dto.module.CommentDTO;
@@ -18,6 +20,7 @@ import top.ortus.timemark.backend.dto.module.ProductDTO;
 import top.ortus.timemark.backend.dto.module.QuestionDTO;
 import top.ortus.timemark.backend.dto.module.ReviewDTO;
 import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
+import top.ortus.timemark.backend.exception.ApiException;
 import top.ortus.timemark.backend.service.FlightSearchService;
 
 import java.util.List;
@@ -28,9 +31,11 @@ import java.util.Map;
 public class PublicApiController {
 
     private final FlightSearchService flightSearchService;
+    private final JwtTokenService jwtTokenService;
 
-    public PublicApiController(FlightSearchService flightSearchService) {
+    public PublicApiController(FlightSearchService flightSearchService, JwtTokenService jwtTokenService) {
         this.flightSearchService = flightSearchService;
+        this.jwtTokenService = jwtTokenService;
     }
 
     @GetMapping("/products")
@@ -64,8 +69,9 @@ public class PublicApiController {
     }
 
     @PostMapping("/flights/order")
-    public ApiResponse<OrderDTO> flightOrder(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(flightSearchService.createOrder(payload));
+    public ApiResponse<OrderDTO> flightOrder(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                             @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok(flightSearchService.createOrder(resolveUserId(authorization), payload));
     }
 
     @GetMapping("/hotels/search")
@@ -287,6 +293,17 @@ public class PublicApiController {
 
     private PageResponse<Map<String, Object>> emptyMapPage() {
         return new PageResponse<>(0, 1, 0, List.<Map<String, Object>>of());
+    }
+
+    private Long resolveUserId(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ApiException(401, "unauthorized");
+        }
+        Long userId = jwtTokenService.resolveUserId(authorization.substring("Bearer ".length()));
+        if (userId == null) {
+            throw new ApiException(401, "unauthorized");
+        }
+        return userId;
     }
 }
 

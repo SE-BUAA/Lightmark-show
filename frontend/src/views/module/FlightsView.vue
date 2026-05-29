@@ -791,8 +791,8 @@ const sortLabel = computed(() => {
   if (form.sort === "stops") return "经停次数";
   return "价格";
 });
-const statusTagType = computed(() => (orderStatus.value?.status === 2 ? "success" : orderStatus.value?.status === 4 ? "warning" : "info"));
-const hasActiveOrder = computed(() => Boolean(currentOrderNo.value) && ![3, 4].includes(Number(orderStatus.value?.status)));
+const statusTagType = computed(() => (orderStatus.value?.status === 1 ? "success" : orderStatus.value?.status === 4 ? "warning" : "info"));
+const hasActiveOrder = computed(() => Boolean(currentOrderNo.value) && ![2, 4].includes(Number(orderStatus.value?.status)));
 const availableCalendarDays = computed(() => calendarDays.value.filter((day) => day.available && Number(day.lowestPrice) > 0));
 const todayCalendarDay = computed(() => calendarDays.value.find((day) => day.date === today));
 const lowestCalendarDay = computed(() => {
@@ -859,7 +859,7 @@ const routeLowPriceAlerts = computed(() => {
 });
 const activeDepartureMonth = computed(() => activeLeg.value.departureDate.slice(0, 7));
 const activeWorkflowIndex = computed(() => {
-  if (orderStatus.value?.ticketNo || orderStatus.value?.status === 2) return 4;
+  if (orderStatus.value?.ticketNo || orderStatus.value?.status === 1) return 4;
   if (currentOrderNo.value || preview.value) return 3;
   if (selectedFlight.value) return 2;
   if (flights.value.length > 0) return 1;
@@ -3990,7 +3990,7 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
 :global([data-theme="dark"]) .flight-page :deep(.el-select__wrapper),
 :global(.dark) .flight-page :deep(.el-input__wrapper),
 :global(.dark) .flight-page :deep(.el-select__wrapper) {
-  background: var(--cream-50) !important;
+  background: #050505 !important;
   box-shadow: 0 0 0 1px var(--border-light) inset !important;
 }
 

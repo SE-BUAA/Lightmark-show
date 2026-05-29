@@ -40,12 +40,11 @@ public class FlightSearchService {
     private static final BigDecimal INSURANCE_FEE = new BigDecimal("30.00");
     private static final BigDecimal EXTRA_BAGGAGE_FEE = new BigDecimal("120.00");
     private static final BigDecimal SEAT_FEE = new BigDecimal("40.00");
-    private static final long DEFAULT_USER_ID = 2L;
     private static final int DEFAULT_CALENDAR_DAYS = 30;
     private static final int MAX_CALENDAR_DAYS = 365;
     private static final int STATUS_PENDING = 0;
-    private static final int STATUS_TICKETED = 2;
-    private static final int STATUS_CANCELED = 3;
+    private static final int STATUS_PAID = 1;
+    private static final int STATUS_CANCELED = 2;
     private static final int STATUS_REFUNDED = 4;
     private static final List<String> PAYMENT_METHODS = List.of("WECHAT", "ALIPAY", "POINTS");
     private static final Map<String, String> AIRPORT_CITY_CODES = Map.ofEntries(
@@ -74,7 +73,7 @@ public class FlightSearchService {
      */
     public PageResponse<ProductDTO> search(Map<String, String> params) {
         List<ProductDTO> flights = jdbcTemplate.queryForList(
-                        "select * from product where product_type = ?",
+                        "select * from product where product_type = ? and status = 1 and stock > 0",
                         "FLIGHT"
                 )
                 .stream()
@@ -131,7 +130,7 @@ public class FlightSearchService {
         int rangeDays = Math.min(parsePositiveInt(value(params, "days"), DEFAULT_CALENDAR_DAYS), MAX_CALENDAR_DAYS);
 
         List<ProductDTO> flights = jdbcTemplate.queryForList(
-                        "select * from product where product_type = ?",
+                        "select * from product where product_type = ? and status = 1 and stock > 0",
                         "FLIGHT"
                 )
                 .stream()
@@ -182,7 +181,10 @@ public class FlightSearchService {
      * 创建订单与扣减库存必须在同一事务内完成，避免并发下单导致超卖。
      */
     @Transactional
-    public OrderDTO createOrder(Map<String, Object> payload) {
+    public OrderDTO createOrder(Long userId, Map<String, Object> payload) {
+        if (userId == null || userId <= 0) {
+            throw new ApiException(401, "unauthorized");
+        }
         ProductDTO flight = getDetail(requiredText(payload, "productId"));
         int passengerCount = passengerCount(payload);
         if (flight.getStock() < passengerCount) {
@@ -194,8 +196,6 @@ public class FlightSearchService {
         BigDecimal payAmount = decimal(preview.get("payAmount"));
         LocalDateTime now = LocalDateTime.now();
         String orderNo = "F" + now.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
-        long userId = parsePositiveLong(asString(payload == null ? null : payload.get("userId")), DEFAULT_USER_ID);
-
         int stockUpdated = jdbcTemplate.update(
                 "update product set stock = stock - ?, sold_count = sold_count + ?, update_time = ? where id = ? and stock >= ?",
                 passengerCount,
@@ -240,6 +240,9 @@ public class FlightSearchService {
     @Transactional
     public Map<String, Object> payOrder(String orderNo, Map<String, Object> payload) {
         OrderDTO order = findOrder(orderNo);
+        if (order.getStatus() == STATUS_PAID) {
+            return paidResult(order.getOrder_no(), order.getPayment_method(), 0);
+        }
         if (order.getStatus() != STATUS_PENDING) {
             throw new ApiException(409, "order is not payable");
         }
@@ -252,7 +255,7 @@ public class FlightSearchService {
         String method = normalizePaymentMethod(asString(payload == null ? null : payload.get("paymentMethod")));
         jdbcTemplate.update(
                 "update `orders` set status = ?, payment_method = ?, pay_time = ?, update_time = ? where order_no = ?",
-                STATUS_TICKETED,
+                STATUS_PAID,
                 method,
                 now,
                 now,
@@ -278,14 +281,7 @@ public class FlightSearchService {
                 Long.parseLong(order.getId()),
                 now
         );
-        return Map.of(
-                "orderNo", orderNo,
-                "status", STATUS_TICKETED,
-                "statusText", "已出票",
-                "paymentMethod", method,
-                "pointsAdded", points,
-                "ticketNo", "TKT" + orderNo.substring(Math.max(0, orderNo.length() - 10))
-        );
+        return paidResult(orderNo, method, points);
     }
 
     @Transactional
@@ -308,7 +304,7 @@ public class FlightSearchService {
     @Transactional
     public Map<String, Object> refundOrder(String orderNo) {
         OrderDTO order = findOrder(orderNo);
-        if (order.getStatus() != STATUS_TICKETED) {
+        if (order.getStatus() != STATUS_PAID) {
             throw new ApiException(409, "order is not refundable");
         }
         Map<String, Object> detail = flightOrderDetail(Long.parseLong(order.getId()));
@@ -784,7 +780,7 @@ public class FlightSearchService {
     private String statusText(int status) {
         return switch (status) {
             case STATUS_PENDING -> "待支付";
-            case STATUS_TICKETED -> "已出票";
+            case STATUS_PAID -> "已出票";
             case STATUS_CANCELED -> "已取消";
             case STATUS_REFUNDED -> "已退款";
             default -> "处理中";
@@ -916,15 +912,14 @@ public class FlightSearchService {
         }
     }
 
-    private long parsePositiveLong(String value, long fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
-        }
-        try {
-            long parsed = Long.parseLong(value);
-            return parsed > 0 ? parsed : fallback;
-        } catch (NumberFormatException ex) {
-            return fallback;
-        }
+    private Map<String, Object> paidResult(String orderNo, String method, int points) {
+        return Map.of(
+                "orderNo", orderNo,
+                "status", STATUS_PAID,
+                "statusText", "已出票",
+                "paymentMethod", method == null ? "" : method,
+                "pointsAdded", points,
+                "ticketNo", "TKT" + orderNo.substring(Math.max(0, orderNo.length() - 10))
+        );
     }
 }

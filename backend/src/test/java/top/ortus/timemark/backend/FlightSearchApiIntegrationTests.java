@@ -9,6 +9,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
@@ -28,6 +30,13 @@ class FlightSearchApiIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private JwtTokenService jwtTokenService;
+
+    private String userToken() {
+        return "Bearer " + jwtTokenService.createToken(2L, "普通用户", List.of("USER"));
+    }
 
     // 覆盖前端机票模块主链路：搜索、价格日历、预览下单、支付、取消/退款和库存回补。
     @Test
@@ -285,6 +294,7 @@ class FlightSearchApiIntegrationTests {
     @Test
     void flightOrderShouldPersistPassengerAndAddonDetail() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -345,6 +355,7 @@ class FlightSearchApiIntegrationTests {
     void flightOrderShouldUseDeclaredPassengerCountForStockAndRestore() throws Exception {
         Integer initialStock = jdbcTemplate.queryForObject("select stock from product where id = 4", Integer.class);
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -380,8 +391,25 @@ class FlightSearchApiIntegrationTests {
     }
 
     @Test
+    void flightOrderShouldRejectMissingAuthorization() throws Exception {
+        mockMvc.perform(post("/api/flights/order")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "productId": "4",
+                                  "adultCount": 1,
+                                  "cabin": "ECONOMY"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.msg").value("unauthorized"));
+    }
+
+    @Test
     void flightOrderShouldCreatePendingOrderAndPayIt() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -409,9 +437,26 @@ class FlightSearchApiIntegrationTests {
                         .content("{\"paymentMethod\":\"ALIPAY\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.status").value(2))
+                .andExpect(jsonPath("$.data.status").value(1))
                 .andExpect(jsonPath("$.data.ticketNo", notNullValue()))
                 .andExpect(jsonPath("$.data.pointsAdded", greaterThan(0)));
+
+        mockMvc.perform(post("/api/orders/{orderNo}/pay", orderNo)
+                        .contentType("application/json")
+                        .content("{\"paymentMethod\":\"ALIPAY\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value(1))
+                .andExpect(jsonPath("$.data.paymentMethod").value("ALIPAY"))
+                .andExpect(jsonPath("$.data.pointsAdded").value(0))
+                .andExpect(jsonPath("$.data.ticketNo", notNullValue()));
+
+        mockMvc.perform(post("/api/payment/callback")
+                        .contentType("application/json")
+                        .content("{\"orderNo\":\"" + orderNo + "\",\"paymentMethod\":\"ALIPAY\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
 
         mockMvc.perform(get("/api/orders/{orderNo}/status", orderNo))
                 .andExpect(status().isOk())
@@ -422,6 +467,7 @@ class FlightSearchApiIntegrationTests {
     @Test
     void flightOrderPaymentShouldAcceptPointsMethod() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -442,7 +488,7 @@ class FlightSearchApiIntegrationTests {
                         .content("{\"paymentMethod\":\"POINTS\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.status").value(2))
+                .andExpect(jsonPath("$.data.status").value(1))
                 .andExpect(jsonPath("$.data.paymentMethod").value("POINTS"))
                 .andExpect(jsonPath("$.data.ticketNo", notNullValue()));
     }
@@ -450,6 +496,7 @@ class FlightSearchApiIntegrationTests {
     @Test
     void flightOrderPaymentShouldRejectUnsupportedMethod() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -476,6 +523,7 @@ class FlightSearchApiIntegrationTests {
     @Test
     void pendingOrderShouldBeCancelable() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -499,13 +547,14 @@ class FlightSearchApiIntegrationTests {
 
         mockMvc.perform(get("/api/orders/{orderNo}/status", orderNo))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value(3))
+                .andExpect(jsonPath("$.data.status").value(2))
                 .andExpect(jsonPath("$.data.cancelReason").value("行程变化"));
     }
 
     @Test
     void ticketedOrderShouldCalculateRefund() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -550,6 +599,7 @@ class FlightSearchApiIntegrationTests {
     @Test
     void aiRefundExplainShouldReturnRuleForOrder() throws Exception {
         String createResponse = mockMvc.perform(post("/api/flights/order")
+                        .header("Authorization", userToken())
                         .contentType("application/json")
                         .content("""
                                 {
