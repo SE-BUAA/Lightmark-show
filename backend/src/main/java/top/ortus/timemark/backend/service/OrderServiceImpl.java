@@ -10,11 +10,13 @@ import top.ortus.timemark.backend.dao.Order;
 import top.ortus.timemark.backend.dao.OrderMapper;
 import top.ortus.timemark.backend.dao.Product;
 import top.ortus.timemark.backend.dao.ProductMapper;
+import top.ortus.timemark.backend.dto.AiDTO;
 import top.ortus.timemark.backend.dto.module.TrainChangePreviewResponse;
 import top.ortus.timemark.backend.dto.module.TrainChangeResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.VacationAssistantResponse;
 import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
 import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
 
@@ -45,6 +47,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ConversationService conversationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -187,6 +192,55 @@ public class OrderServiceImpl implements OrderService {
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Order::getPickupCode, pickupCode);
         return refundVacationOrder(orderMapper.selectOne(wrapper));
+    }
+
+    @Override
+    public VacationAssistantResponse generateVacationAssistant(String orderNo) {
+        Order order = getOrderByNo(orderNo);
+        if (order == null) {
+            throw new IllegalArgumentException("订单不存在");
+        }
+        if (!"VACATION".equals(order.getOrderType())) {
+            throw new IllegalArgumentException("只支持度假订单生成智能行程助手建议");
+        }
+        if (order.getStatus() != PAID) {
+            throw new IllegalArgumentException("请支付成功后再使用智能行程助手");
+        }
+
+        Map<String, Object> extraInfo = readExtraInfo(order);
+        String destination = valueOf(extraInfo.get("destination"));
+        String date = valueOf(extraInfo.get("date"));
+        String vacationName = valueOf(extraInfo.get("vacationName"));
+        String days = valueOf(extraInfo.get("days"));
+        String departCity = valueOf(extraInfo.get("departCity"));
+        if (destination == null || destination.isBlank()) {
+            destination = "目的地";
+        }
+        if (date == null || date.isBlank()) {
+            date = LocalDate.now().toString();
+        }
+
+        String prompt = "请根据用户已购买的度假产品生成智能行程助手建议。产品为" + valueOrDefault(vacationName, "度假产品")
+            + "，出发城市为" + valueOrDefault(departCity, "未填写")
+            + "，目的地为" + destination
+            + "，出行日期为" + date
+            + "，行程天数为" + valueOrDefault(days, "未填写")
+            + "。请提供今日天气、穿衣建议、美食推荐，中文输出，轻松友好，分点展示。";
+        String content;
+        try {
+            AiDTO aiDTO = conversationService.chat(
+                "vacation-assistant-" + order.getOrderNo() + "-" + System.nanoTime(),
+                prompt,
+                "你是智能行程助手。请直接给出目的地天气、穿衣建议和美食推荐。不要调用工具；如果没有实时天气数据，请基于出行日期和目的地给出合理提醒，并提示以当地实时天气预报为准。"
+            );
+            content = aiDTO == null ? "" : aiDTO.getContent();
+        } catch (Exception ex) {
+            content = "";
+        }
+        if (content == null || content.isBlank()) {
+            content = fallbackVacationAssistant(destination, date);
+        }
+        return new VacationAssistantResponse(order.getOrderNo(), destination, date, content);
     }
 
     private VacationRefundResponse refundVacationOrder(Order order) {
@@ -613,6 +667,17 @@ public class OrderServiceImpl implements OrderService {
 
     private String valueOf(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String valueOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String fallbackVacationAssistant(String destination, String date) {
+        return "智能行程助手建议\n"
+            + "1. 今日天气：" + destination + "在" + date + "的天气请以当地实时预报为准，出门前留意气温、降雨和风力变化。\n"
+            + "2. 穿衣建议：建议选择舒适透气的衣物和好走的鞋，随身带一件薄外套；如遇雨季或海边城市，可备雨具和防晒用品。\n"
+            + "3. 美食推荐：优先尝试" + destination + "当地特色小吃、老字号餐厅和应季菜品，行程第一天可以安排轻松一点，把胃口留给夜市或商圈。";
     }
 
     private BigDecimal calculatePayAmount(BigDecimal originalAmount, TrainOrderRequest request) {

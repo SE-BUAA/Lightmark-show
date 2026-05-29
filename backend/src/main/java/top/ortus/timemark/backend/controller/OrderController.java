@@ -16,6 +16,7 @@ import top.ortus.timemark.backend.dto.module.TrainChangePreviewResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.VacationAssistantResponse;
 import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
 import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
 import top.ortus.timemark.backend.service.OrderService;
@@ -62,6 +63,11 @@ public class OrderController {
     @PostMapping("/vacation/refund")
     public ApiResponse<VacationRefundResponse> refundVacationOrderByPickupCode(@RequestParam String pickupCode) {
         return ApiResponse.ok(orderService.refundVacationOrderByPickupCode(pickupCode));
+    }
+
+    @GetMapping("/vacation/{orderNo}/assistant")
+    public ApiResponse<VacationAssistantResponse> generateVacationAssistant(@PathVariable String orderNo) {
+        return ApiResponse.ok(orderService.generateVacationAssistant(orderNo));
     }
 
     @GetMapping("/train/change")

@@ -18,7 +18,7 @@ spring:
     deepseek:
         # DEEPSEEK API configuration
       base-url: https://api.deepseek.com/v1
-      api-key: ${DEEPSEEK_API_KEY:your-deepseek-api-key} # Configure in your environment variables for security
+      api-key: ${DEEPSEEK_API_KEY:sk-5253b612748b4e59a477314153eb0c15} # Configure in your environment variables for security
       chat:
         options:
           model: deepseek-v4-flash  # Fast and responsive model for immediate results

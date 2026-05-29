@@ -45,12 +45,28 @@ export interface VacationRefundResponse {
   refundRule: string
 }
 
+export interface VacationAiDetailResponse {
+  productId: string
+  content: string
+}
+
+export interface VacationAssistantResponse {
+  orderNo: string
+  destination: string
+  date: string
+  content: string
+}
+
 export function getVacationOptions() {
   return http.get<VacationOptions>('/vacations/options')
 }
 
 export function searchVacations(data: VacationSearchPayload) {
   return http.post<VacationProduct[]>('/vacations/search', data)
+}
+
+export function generateVacationDetail(productId: string) {
+  return http.get<VacationAiDetailResponse>(`/vacations/${productId}/detail-ai`)
 }
 
 export function createVacationOrder(data: VacationOrderPayload) {
@@ -73,6 +89,10 @@ export function refundVacationOrderByPickupCode(pickupCode: string) {
 
 export function getVacationOrder(orderNo: string) {
   return http.get<TrainOrderDetail>(`/orders/${orderNo}`)
+}
+
+export function generateVacationAssistant(orderNo: string) {
+  return http.get<VacationAssistantResponse>(`/orders/vacation/${orderNo}/assistant`)
 }
 
 export function cancelVacationOrder(orderNo: string) {

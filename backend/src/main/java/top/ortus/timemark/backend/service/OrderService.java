@@ -6,6 +6,7 @@ import top.ortus.timemark.backend.dto.module.TrainChangeResponse;
 import top.ortus.timemark.backend.dto.module.TrainChangePreviewResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.VacationAssistantResponse;
 import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
 import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
 
@@ -17,6 +18,7 @@ public interface OrderService {
     TrainRefundResponse refundTrainOrderByPickupCode(String pickupCode);
     VacationRefundResponse refundVacationOrder(String orderNo);
     VacationRefundResponse refundVacationOrderByPickupCode(String pickupCode);
+    VacationAssistantResponse generateVacationAssistant(String orderNo);
     TrainChangePreviewResponse previewTrainChange(String pickupCode);
     TrainChangeResponse changeTrainOrder(String pickupCode, String targetProductId);
     Order getOrderByNo(String orderNo);

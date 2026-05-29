@@ -1,6 +1,7 @@
 package top.ortus.timemark.backend.service;
 
 import top.ortus.timemark.backend.dao.Product;
+import top.ortus.timemark.backend.dto.module.VacationAiDetailResponse;
 import top.ortus.timemark.backend.dto.module.VacationOptionsResponse;
 import top.ortus.timemark.backend.dto.module.VacationSearchRequest;
 
@@ -12,4 +13,6 @@ public interface VacationService {
     Product searchById(Integer productId);
 
     VacationOptionsResponse options();
+
+    VacationAiDetailResponse generateAiDetail(Integer productId);
 }
