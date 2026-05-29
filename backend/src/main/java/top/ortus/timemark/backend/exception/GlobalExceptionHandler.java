@@ -1,6 +1,7 @@
 package top.ortus.timemark.backend.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,9 +22,9 @@ public class GlobalExceptionHandler {
      * @return 错误响应
      */
     @ExceptionHandler(ApiException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse<Void> handleApiException(ApiException ex) {
-        return ApiResponse.error(ex.getCode(), ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleApiException(ApiException ex) {
+        return ResponseEntity.status(statusFor(ex.getCode()))
+                .body(ApiResponse.error(ex.getCode(), ex.getMessage()));
     }
 
     /**
@@ -67,5 +68,13 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleGeneric(Exception ex) {
         ex.printStackTrace();
         return ApiResponse.error(500, ex.getMessage() != null ? ex.getMessage() : "internal error");
+    }
+
+    private HttpStatus statusFor(int code) {
+        return switch (code) {
+            case 401 -> HttpStatus.UNAUTHORIZED;
+            case 403 -> HttpStatus.FORBIDDEN;
+            default -> HttpStatus.BAD_REQUEST;
+        };
     }
 }

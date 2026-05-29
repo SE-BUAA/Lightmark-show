@@ -6,9 +6,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import top.ortus.timemark.backend.JwtTokenService;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.common.PageResponse;
 import top.ortus.timemark.backend.dto.module.CommentDTO;
@@ -18,6 +20,8 @@ import top.ortus.timemark.backend.dto.module.ProductDTO;
 import top.ortus.timemark.backend.dto.module.QuestionDTO;
 import top.ortus.timemark.backend.dto.module.ReviewDTO;
 import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
+import top.ortus.timemark.backend.exception.ApiException;
+import top.ortus.timemark.backend.service.FlightSearchService;
 
 import java.util.List;
 import java.util.Map;
@@ -25,6 +29,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class PublicApiController {
+
+    private final FlightSearchService flightSearchService;
+    private final JwtTokenService jwtTokenService;
+
+    public PublicApiController(FlightSearchService flightSearchService, JwtTokenService jwtTokenService) {
+        this.flightSearchService = flightSearchService;
+        this.jwtTokenService = jwtTokenService;
+    }
 
     @GetMapping("/products")
     public ApiResponse<PageResponse<ProductDTO>> products(@RequestParam Map<String, String> params) {
@@ -38,27 +50,28 @@ public class PublicApiController {
 
     @GetMapping("/flights/search")
     public ApiResponse<PageResponse<ProductDTO>> flightSearch(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+        return ApiResponse.ok(flightSearchService.search(params));
     }
 
     @GetMapping("/flights/price-calendar")
     public ApiResponse<Map<String, Object>> flightPriceCalendar(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(Map.of("dates", List.of(), "prices", List.of()));
+        return ApiResponse.ok(flightSearchService.priceCalendar(params));
     }
 
     @GetMapping("/flights/{productId}")
     public ApiResponse<ProductDTO> flightDetail(@PathVariable String productId) {
-        return ApiResponse.ok(new ProductDTO());
+        return ApiResponse.ok(flightSearchService.getDetail(productId));
     }
 
     @PostMapping("/flights/order/preview")
     public ApiResponse<Map<String, Object>> flightOrderPreview(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("preview", true));
+        return ApiResponse.ok(flightSearchService.previewOrder(payload));
     }
 
     @PostMapping("/flights/order")
-    public ApiResponse<OrderDTO> flightOrder(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(new OrderDTO());
+    public ApiResponse<OrderDTO> flightOrder(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                             @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok(flightSearchService.createOrder(resolveUserId(authorization), payload));
     }
 
     @GetMapping("/hotels/search")
@@ -113,27 +126,28 @@ public class PublicApiController {
 
     @PostMapping("/orders/{orderNo}/pay")
     public ApiResponse<Map<String, Object>> payOrder(@PathVariable String orderNo, @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "paid", true));
+        return ApiResponse.ok(flightSearchService.payOrder(orderNo, payload));
     }
 
     @PostMapping("/orders/{orderNo}/cancel")
-    public ApiResponse<Boolean> cancelOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(true);
+    public ApiResponse<Boolean> cancelOrder(@PathVariable String orderNo, @RequestBody(required = false) Map<String, Object> payload) {
+        String reason = payload == null ? null : String.valueOf(payload.getOrDefault("reason", ""));
+        return ApiResponse.ok(flightSearchService.cancelOrder(orderNo, reason));
     }
 
     @PostMapping("/orders/{orderNo}/refund")
     public ApiResponse<Map<String, Object>> refundOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "refundAmount", 0));
+        return ApiResponse.ok(flightSearchService.refundOrder(orderNo));
     }
 
     @GetMapping("/orders/{orderNo}/status")
     public ApiResponse<Map<String, Object>> orderStatus(@PathVariable String orderNo) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "status", "PENDING"));
+        return ApiResponse.ok(flightSearchService.orderStatus(orderNo));
     }
 
     @PostMapping("/payment/callback")
     public ApiResponse<Boolean> paymentCallback(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(true);
+        return ApiResponse.ok(flightSearchService.paymentCallback(payload));
     }
 
     @GetMapping("/itinerary/my-plans")
@@ -279,6 +293,17 @@ public class PublicApiController {
 
     private PageResponse<Map<String, Object>> emptyMapPage() {
         return new PageResponse<>(0, 1, 0, List.<Map<String, Object>>of());
+    }
+
+    private Long resolveUserId(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ApiException(401, "unauthorized");
+        }
+        Long userId = jwtTokenService.resolveUserId(authorization.substring("Bearer ".length()));
+        if (userId == null) {
+            throw new ApiException(401, "unauthorized");
+        }
+        return userId;
     }
 }
 
