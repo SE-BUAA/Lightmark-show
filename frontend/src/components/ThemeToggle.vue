@@ -1,8 +1,10 @@
 <template>
-  <label class="toggle" data-theme-picker>
+  <label class="toggle" data-theme-picker :aria-label="isDark ? '切换到浅色模式' : '切换到黑夜模式'">
     <input
       type="checkbox"
       class="toggle__input"
+      role="switch"
+      :aria-checked="isDark"
       :checked="isDark"
       @change="toggleTheme"
     />
@@ -48,17 +50,18 @@ const toggleTheme = () => {
 const applyTheme = (dark: boolean) => {
   if (dark) {
     document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.classList.add("dark");
   } else {
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.classList.remove("dark");
   }
 };
 
 onMounted(() => {
   const saved = localStorage.getItem(THEME_KEY);
-  if (saved === "dark") {
-    isDark.value = true;
-    applyTheme(true);
-  }
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  isDark.value = saved ? saved === "dark" : prefersDark;
+  applyTheme(isDark.value);
 });
 </script>
 

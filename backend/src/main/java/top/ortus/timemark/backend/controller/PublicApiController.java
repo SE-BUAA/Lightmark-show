@@ -18,6 +18,7 @@ import top.ortus.timemark.backend.dto.module.ProductDTO;
 import top.ortus.timemark.backend.dto.module.QuestionDTO;
 import top.ortus.timemark.backend.dto.module.ReviewDTO;
 import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
+import top.ortus.timemark.backend.service.FlightSearchService;
 
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class PublicApiController {
+
+    private final FlightSearchService flightSearchService;
+
+    public PublicApiController(FlightSearchService flightSearchService) {
+        this.flightSearchService = flightSearchService;
+    }
 
     @GetMapping("/products")
     public ApiResponse<PageResponse<ProductDTO>> products(@RequestParam Map<String, String> params) {
@@ -38,27 +45,27 @@ public class PublicApiController {
 
     @GetMapping("/flights/search")
     public ApiResponse<PageResponse<ProductDTO>> flightSearch(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+        return ApiResponse.ok(flightSearchService.search(params));
     }
 
     @GetMapping("/flights/price-calendar")
     public ApiResponse<Map<String, Object>> flightPriceCalendar(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(Map.of("dates", List.of(), "prices", List.of()));
+        return ApiResponse.ok(flightSearchService.priceCalendar(params));
     }
 
     @GetMapping("/flights/{productId}")
     public ApiResponse<ProductDTO> flightDetail(@PathVariable String productId) {
-        return ApiResponse.ok(new ProductDTO());
+        return ApiResponse.ok(flightSearchService.getDetail(productId));
     }
 
     @PostMapping("/flights/order/preview")
     public ApiResponse<Map<String, Object>> flightOrderPreview(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("preview", true));
+        return ApiResponse.ok(flightSearchService.previewOrder(payload));
     }
 
     @PostMapping("/flights/order")
     public ApiResponse<OrderDTO> flightOrder(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(new OrderDTO());
+        return ApiResponse.ok(flightSearchService.createOrder(payload));
     }
 
     @GetMapping("/hotels/search")
@@ -113,27 +120,28 @@ public class PublicApiController {
 
     @PostMapping("/orders/{orderNo}/pay")
     public ApiResponse<Map<String, Object>> payOrder(@PathVariable String orderNo, @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "paid", true));
+        return ApiResponse.ok(flightSearchService.payOrder(orderNo, payload));
     }
 
     @PostMapping("/orders/{orderNo}/cancel")
-    public ApiResponse<Boolean> cancelOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(true);
+    public ApiResponse<Boolean> cancelOrder(@PathVariable String orderNo, @RequestBody(required = false) Map<String, Object> payload) {
+        String reason = payload == null ? null : String.valueOf(payload.getOrDefault("reason", ""));
+        return ApiResponse.ok(flightSearchService.cancelOrder(orderNo, reason));
     }
 
     @PostMapping("/orders/{orderNo}/refund")
     public ApiResponse<Map<String, Object>> refundOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "refundAmount", 0));
+        return ApiResponse.ok(flightSearchService.refundOrder(orderNo));
     }
 
     @GetMapping("/orders/{orderNo}/status")
     public ApiResponse<Map<String, Object>> orderStatus(@PathVariable String orderNo) {
-        return ApiResponse.ok(Map.of("orderNo", orderNo, "status", "PENDING"));
+        return ApiResponse.ok(flightSearchService.orderStatus(orderNo));
     }
 
     @PostMapping("/payment/callback")
     public ApiResponse<Boolean> paymentCallback(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(true);
+        return ApiResponse.ok(flightSearchService.paymentCallback(payload));
     }
 
     @GetMapping("/itinerary/my-plans")
