@@ -28,36 +28,50 @@ const routes: Array<RouteRecordRaw> = [
     path: "/flights",
     name: "flights",
     component: () => import("@/views/module/FlightsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/hotels",
     name: "hotels",
     component: () => import("@/views/module/HotelsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/trains",
     name: "trains",
     component: () => import("@/views/module/TrainsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/vacations",
     name: "vacations",
     component: () => import("@/views/module/VacationsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/itinerary",
     name: "itinerary",
     component: () => import("@/views/module/ItineraryView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/community",
     name: "community",
     component: () => import("@/views/module/CommunityView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/user-center",
     name: "user-center",
     component: () => import("@/views/module/UserCenterView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/admin/login",
