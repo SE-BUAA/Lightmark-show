@@ -120,6 +120,10 @@
               <span class="quick-icon">🏨</span>
               <span>预订酒店</span>
             </router-link>
+            <router-link to="/hotels/orders" class="quick-item">
+              <span class="quick-icon">单</span>
+              <span>酒店订单</span>
+            </router-link>
             <router-link to="/itinerary" class="quick-item">
               <span class="quick-icon">🗺</span>
               <span>规划行程</span>

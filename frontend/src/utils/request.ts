@@ -5,7 +5,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import { ElMessage } from "element-plus";
-import { getAuthSnapshot } from "@/utils/auth";
+import { clearAuthSnapshot, getAuthSnapshot } from "@/utils/auth";
 
 /**
  * API响应数据结构
@@ -21,6 +21,14 @@ interface ApiResponse<T> {
   /** 响应数据体 */
   data: T;
 }
+
+const handleUnauthorized = () => {
+  clearAuthSnapshot();
+  if (window.location.pathname !== "/login") {
+    const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login?redirect=${redirect}`;
+  }
+};
 
 // 创建Axios实例，配置基础URL和超时时间
 const request: AxiosInstance = axios.create({
@@ -58,6 +66,9 @@ request.interceptors.response.use(
     // 检查业务状态码，如果不是0（表示失败）则显示错误消息
     if (payload.code !== 0) {
       const message = payload.msg || payload.errorMsg || "请求失败";
+      if (payload.code === 401) {
+        handleUnauthorized();
+      }
       ElMessage.error(message);
       return Promise.reject(new Error(message));
     }
@@ -73,6 +84,9 @@ request.interceptors.response.use(
       (error.response?.data as { errorMsg?: string } | undefined)?.errorMsg ||
       error.message ||
       "网络异常";
+    if (error.response?.status === 401) {
+      handleUnauthorized();
+    }
     // 显示错误消息给用户
     ElMessage.error(message);
     // 返回拒绝的Promise，让调用方可以处理错误

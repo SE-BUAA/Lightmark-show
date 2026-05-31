@@ -39,6 +39,41 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/hotels/search",
+    name: "HotelSearch",
+    component: () => import("@/views/hotel/HotelSearch.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotel/search",
+    redirect: "/hotels/search",
+  },
+  {
+    path: "/hotels/detail/:hotelId",
+    name: "HotelDetail",
+    component: () => import("@/views/hotel/HotelDetail.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotels/payment/:orderId",
+    name: "HotelPayment",
+    component: () => import("@/views/hotel/HotelPayment.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotels/orders",
+    name: "HotelOrders",
+    component: () => import("@/views/hotel/HotelOrders.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotel/detail/:hotelId",
+    redirect: (to) => ({
+      path: `/hotels/detail/${to.params.hotelId}`,
+      query: to.query,
+    }),
+  },
+  {
     path: "/trains",
     name: "trains",
     component: () => import("@/views/module/TrainsView.vue"),
