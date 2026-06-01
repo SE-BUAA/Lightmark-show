@@ -3,7 +3,9 @@ package top.ortus.timemark.backend.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,7 @@ import top.ortus.timemark.backend.dto.AIHotelSearchIntent;
 import top.ortus.timemark.backend.dto.AIRecommendResultVO;
 import top.ortus.timemark.backend.dto.HotelSearchDTO;
 import top.ortus.timemark.backend.dto.ReviewSummaryVO;
+import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
 import top.ortus.timemark.backend.service.AIService;
 import top.ortus.timemark.backend.service.HotelService;
 import top.ortus.timemark.backend.utils.AIClient;
@@ -22,11 +25,13 @@ import top.ortus.timemark.backend.vo.HotelVO;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,19 +54,33 @@ public class AIServiceImpl implements AIService {
     private final AIClient aiClient;
     private final Resource hotelRecommendPrompt;
     private final Resource reviewSummaryPrompt;
+    private final Resource travelPlanPrompt;
 
+    AIServiceImpl(HotelService hotelService,
+                  JdbcTemplate jdbcTemplate,
+                  ObjectMapper objectMapper,
+                  AIClient aiClient,
+                  Resource hotelRecommendPrompt,
+                  Resource reviewSummaryPrompt) {
+        this(hotelService, jdbcTemplate, objectMapper, aiClient, hotelRecommendPrompt, reviewSummaryPrompt,
+                new ByteArrayResource("用户需求：%s".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Autowired
     public AIServiceImpl(HotelService hotelService,
                          JdbcTemplate jdbcTemplate,
                          ObjectMapper objectMapper,
                          AIClient aiClient,
                          @Value("classpath:prompts/hotel_recommend.txt") Resource hotelRecommendPrompt,
-                         @Value("classpath:prompts/review_summary.txt") Resource reviewSummaryPrompt) {
+                         @Value("classpath:prompts/review_summary.txt") Resource reviewSummaryPrompt,
+                         @Value("classpath:prompts/travel_plan_generate.txt") Resource travelPlanPrompt) {
         this.hotelService = hotelService;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.aiClient = aiClient;
         this.hotelRecommendPrompt = hotelRecommendPrompt;
         this.reviewSummaryPrompt = reviewSummaryPrompt;
+        this.travelPlanPrompt = travelPlanPrompt;
     }
 
     @Override
@@ -157,6 +176,31 @@ public class AIServiceImpl implements AIService {
         }
     }
 
+    @Override
+    public TravelPlanDTO generateTravelPlan(Map<String, Object> payload) {
+        Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+        String destination = textFrom(safePayload, "destination", "目的地");
+        int days = Math.max(1, Math.min(numberFrom(safePayload, 3, "days", "天数"), 14));
+        LocalDate startDate = dateFrom(safePayload, "startDate", "start_date", "date");
+        String preferences = textFrom(safePayload, "preferences", "偏好");
+        String budget = textFrom(safePayload, "budget", "预算");
+        String userNeed = "目的地=" + valueOrDefault(destination, "未填写")
+                + "；天数=" + days
+                + "；出发日期=" + (startDate == null ? "未填写" : startDate)
+                + "；预算=" + valueOrDefault(budget, "未填写")
+                + "；偏好=" + valueOrDefault(preferences, "未填写");
+        String prompt = String.format(loadPrompt(travelPlanPrompt, "请生成旅行行程 JSON：%s"), userNeed);
+        log.info("AI travel plan prompt={}, length={}", mask(prompt), prompt.length());
+        try {
+            return aiClient.chat(prompt)
+                    .map(response -> parseTravelPlan(response, destination, days, startDate))
+                    .orElseGet(() -> fallbackTravelPlan(destination, days, startDate, preferences, budget));
+        } catch (Exception ex) {
+            log.warn("AI travel plan fallback: {}", ex.getMessage());
+            return fallbackTravelPlan(destination, days, startDate, preferences, budget);
+        }
+    }
+
     AIHotelSearchIntent parseHotelIntent(String response) {
         try {
             JsonNode node = parseModelJson(response);
@@ -184,6 +228,26 @@ public class AIServiceImpl implements AIService {
                     .build();
         } catch (Exception ex) {
             throw new IllegalArgumentException("invalid_ai_review_json", ex);
+        }
+    }
+
+    TravelPlanDTO parseTravelPlan(String response, String fallbackDestination, int fallbackDays, LocalDate fallbackStartDate) {
+        try {
+            JsonNode node = parseModelJson(response);
+            String destination = textValue(node, "destination", "目的地");
+            LocalDate startDate = parseDate(textValue(node, "start_date", "startDate"));
+            LocalDate endDate = parseDate(textValue(node, "end_date", "endDate"));
+            JsonNode planData = firstNode(node, "plan_data", "planData");
+            TravelPlanDTO dto = new TravelPlanDTO();
+            dto.setTitle(valueOrDefault(textValue(node, "title", "标题"), valueOrDefault(destination, fallbackDestination) + "智能行程"));
+            dto.setDestination(valueOrDefault(destination, fallbackDestination));
+            dto.setStart_date(startDate == null ? fallbackStartDate : startDate);
+            dto.setEnd_date(endDate == null ? endDateFrom(dto.getStart_date(), fallbackDays) : endDate);
+            dto.setPlan_data(planData == null ? fallbackPlanData(valueOrDefault(destination, fallbackDestination), fallbackDays) : objectMapper.writeValueAsString(planData));
+            dto.setIs_public(0);
+            return dto;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("invalid_ai_travel_plan_json", ex);
         }
     }
 
@@ -376,6 +440,106 @@ public class AIServiceImpl implements AIService {
         } catch (Exception ex) {
             return fallback;
         }
+    }
+
+    private TravelPlanDTO fallbackTravelPlan(String destination, int days, LocalDate startDate, String preferences, String budget) {
+        String safeDestination = StringUtils.hasText(destination) ? destination.trim() : "目的地";
+        TravelPlanDTO dto = new TravelPlanDTO();
+        dto.setTitle(safeDestination + days + "日智能行程");
+        dto.setDestination(safeDestination);
+        dto.setStart_date(startDate);
+        dto.setEnd_date(endDateFrom(startDate, days));
+        dto.setPlan_data(fallbackPlanData(safeDestination, days, preferences, budget));
+        dto.setIs_public(0);
+        return dto;
+    }
+
+    private String fallbackPlanData(String destination, int days) {
+        return fallbackPlanData(destination, days, "", "");
+    }
+
+    private String fallbackPlanData(String destination, int days, String preferences, String budget) {
+        List<Map<String, Object>> data = new ArrayList<>();
+        for (int i = 1; i <= days; i++) {
+            String theme = i == 1 ? "抵达与初见" : (i == days ? "收尾与返程" : "深度体验");
+            List<String> items = new ArrayList<>();
+            if (i == 1) {
+                items.add("抵达" + destination + "并办理入住");
+                items.add("安排轻松市区散步，熟悉交通和周边");
+                items.add("晚餐选择当地代表性美食");
+            } else if (i == days) {
+                items.add("上午补充一个轻量景点或当地市场");
+                items.add("整理行李并预留前往车站/机场时间");
+                items.add("返程前购买伴手礼");
+            } else {
+                items.add("上午游览" + destination + "经典景点");
+                items.add("下午安排文化街区、博物馆或自然景观");
+                items.add("晚上体验夜市、商圈或特色餐厅");
+            }
+            String tip = "注意根据实时天气调整；" + (StringUtils.hasText(preferences) ? "已结合偏好：" + preferences + "；" : "")
+                    + (StringUtils.hasText(budget) ? "预算参考：" + budget : "费用按现场价格为准");
+            data.add(Map.of("day", i, "theme", theme, "items", items, "tips", tip));
+        }
+        try {
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception ex) {
+            return "[]";
+        }
+    }
+
+    private String textFrom(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = payload.get(key);
+            if (value != null && StringUtils.hasText(String.valueOf(value))) {
+                return String.valueOf(value).trim();
+            }
+        }
+        return null;
+    }
+
+    private int numberFrom(Map<String, Object> payload, int fallback, String... keys) {
+        for (String key : keys) {
+            Object value = payload.get(key);
+            if (value instanceof Number number) {
+                return number.intValue();
+            }
+            if (value != null) {
+                String digits = String.valueOf(value).replaceAll("[^0-9]", "");
+                if (StringUtils.hasText(digits)) {
+                    return Integer.parseInt(digits);
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private LocalDate dateFrom(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            LocalDate parsed = parseDate(Objects.toString(payload.get(key), null));
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    private LocalDate parseDate(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private LocalDate endDateFrom(LocalDate startDate, int days) {
+        return startDate == null ? null : startDate.plusDays(Math.max(days, 1) - 1L);
+    }
+
+    private String valueOrDefault(String value, String fallback) {
+        return StringUtils.hasText(value) ? value.trim() : fallback;
     }
 
     private String extractDestination(String input) {

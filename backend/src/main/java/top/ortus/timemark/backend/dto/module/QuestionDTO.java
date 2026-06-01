@@ -5,10 +5,12 @@ import java.time.LocalDateTime;
 public class QuestionDTO {
     private String id;
     private String user_id;
+    private String user_nickname;
     private String title;
     private String content;
     private String answer;
     private String answer_user_id;
+    private String answer_user_nickname;
     private int status;
     private LocalDateTime create_time;
     private LocalDateTime answer_time;
@@ -30,6 +32,14 @@ public class QuestionDTO {
 
     public void setUser_id(String user_id) {
         this.user_id = user_id;
+    }
+
+    public String getUser_nickname() {
+        return user_nickname;
+    }
+
+    public void setUser_nickname(String user_nickname) {
+        this.user_nickname = user_nickname;
     }
 
     public String getTitle() {
@@ -62,6 +72,14 @@ public class QuestionDTO {
 
     public void setAnswer_user_id(String answer_user_id) {
         this.answer_user_id = answer_user_id;
+    }
+
+    public String getAnswer_user_nickname() {
+        return answer_user_nickname;
+    }
+
+    public void setAnswer_user_nickname(String answer_user_nickname) {
+        this.answer_user_nickname = answer_user_nickname;
     }
 
     public int getStatus() {

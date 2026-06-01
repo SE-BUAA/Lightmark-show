@@ -399,53 +399,231 @@
 
 **## 7. 行程、社区与评价**
 
-  
+> 本节接口均返回统一结构：`{ "code": 0, "msg": "success", "data": ... }`。除公开列表查询外，接口需要在请求头携带 `Authorization: Bearer <token>`。
 
-> 该部分当前为占位实现。
+### 7.1 智能行程
 
-  
+**### GET `/api/itinerary/my-plans` `【已实现】`**
 
-**### GET `/api/itinerary/my-plans` `【待实现】`**
+- 说明：分页查询当前登录用户的行程。
+- Query 参数：
+  - `page`：页码，默认 `1`
+  - `size`：每页数量，默认 `10`
+- 响应 `data` 示例：
 
-**### POST `/api/itinerary/plans` `【待实现】`**
+```json
+{
+  "list": [
+    {
+      "id": "1",
+      "user_id": "2",
+      "title": "杭州三日慢游",
+      "destination": "杭州",
+      "start_date": "2026-07-01",
+      "end_date": "2026-07-03",
+      "plan_data": "[{\"day\":1,\"theme\":\"西湖初见\",\"items\":[\"抵达杭州\"]}]",
+      "is_public": 1,
+      "create_time": "2026-06-01T10:00:00"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 10
+}
+```
 
-**### PUT `/api/itinerary/plans/{id}` `【待实现】`**
+**### POST `/api/itinerary/plans` `【已实现】`**
 
-**### DELETE `/api/itinerary/plans/{id}` `【待实现】`**
+- 说明：保存手动创建或 AI 生成后的行程。
+- 请求体：
 
-**### POST `/api/itinerary/ai/generate` `【待实现】`**
+```json
+{
+  "title": "杭州两日智能行程",
+  "destination": "杭州",
+  "start_date": "2026-07-01",
+  "end_date": "2026-07-02",
+  "plan_data": "[{\"day\":1,\"theme\":\"西湖与湖滨\",\"items\":[\"西湖步行\",\"湖滨晚餐\"],\"tips\":[\"注意防晒\"]}]",
+  "is_public": 0
+}
+```
 
-**### GET `/api/itinerary/plans/{id}/share` `【待实现】`**
+- 响应 `data`：`TravelPlanDTO`
 
-**### GET `/api/itinerary/plans/{id}/export` `【待实现】`**
+**### PUT `/api/itinerary/plans/{id}` `【已实现】`**
 
-  
+- 说明：修改当前用户自己的行程。
+- 请求体：同创建行程，可传需要更新的字段。
+- 响应 `data`：更新后的 `TravelPlanDTO`
 
-**### GET `/api/posts` `【待实现】`**
+**### DELETE `/api/itinerary/plans/{id}` `【已实现】`**
 
-**### GET `/api/posts/{id}` `【待实现】`**
+- 说明：删除当前用户自己的行程。
+- 响应 `data`：`true`
 
-**### POST `/api/posts` `【待实现】`**
+**### POST `/api/itinerary/ai/generate` `【已实现】`**
 
-**### PUT `/api/posts/{id}` `【待实现】`**
+- 说明：根据目的地、天数、预算和偏好生成结构化行程。AI 配置缺失或调用失败时会返回规则降级行程。
+- 请求体：
 
-**### DELETE `/api/posts/{id}` `【待实现】`**
+```json
+{
+  "destination": "杭州",
+  "days": 2,
+  "startDate": "2026-07-01",
+  "budget": "人均3000元",
+  "preferences": "慢节奏和美食"
+}
+```
 
-**### POST `/api/posts/{id}/like` `【待实现】`**
+- 响应 `data`：未入库的 `TravelPlanDTO`，可继续调用 `POST /api/itinerary/plans` 保存。
 
-**### GET `/api/posts/{id}/comments` `【待实现】`**
+**### GET `/api/itinerary/plans/{id}/share` `【已实现】`**
 
-**### POST `/api/posts/{id}/comments` `【待实现】`**
+- 说明：将当前用户自己的行程设为公开并生成分享链接。
+- 响应 `data` 示例：
 
-  
+```json
+{
+  "shortLink": "/itinerary?sharedPlanId=1"
+}
+```
 
-**### GET `/api/questions` `【待实现】`**
+**### GET `/api/itinerary/plans/{id}/export` `【已实现】`**
 
-**### POST `/api/questions` `【待实现】`**
+- 说明：返回行程导出地址。
+- 响应 `data` 示例：
 
-**### GET `/api/questions/{id}` `【待实现】`**
+```json
+{
+  "fileUrl": "/api/itinerary/plans/1/export"
+}
+```
 
-**### POST `/api/questions/{id}/answer` `【待实现】`**
+### 7.2 游记社区
+
+**### GET `/api/posts` `【已实现】`**
+
+- 说明：分页查询已发布游记。
+- Query 参数：
+  - `page`：页码，默认 `1`
+  - `size`：每页数量，默认 `10`
+  - `keyword`：按标题或内容搜索，可选
+  - `sort`：`latest` 或 `hot`，默认 `latest`
+- 响应 `data`：分页对象，`list` 内为 `PostDTO`
+
+**### GET `/api/posts/{id}` `【已实现】`**
+
+- 说明：查询游记详情。
+- 响应 `data`：`PostDTO`
+
+**### POST `/api/posts` `【已实现】`**
+
+- 说明：发布游记。
+- 请求体：
+
+```json
+{
+  "title": "杭州三日慢游路线分享",
+  "content": "西湖适合留出完整半天，龙井村建议上午去。",
+  "images": "[\"https://picsum.photos/id/104/640/420\"]"
+}
+```
+
+- 响应 `data`：新建的 `PostDTO`
+
+**### PUT `/api/posts/{id}` `【已实现】`**
+
+- 说明：编辑当前用户自己的游记。
+- 请求体：同发布游记，可传需要更新的字段。
+- 响应 `data`：更新后的 `PostDTO`
+
+**### DELETE `/api/posts/{id}` `【已实现】`**
+
+- 说明：软删除游记，仅游记发布者或管理员可操作。
+- 响应 `data`：`true`
+
+**### POST `/api/posts/{id}/like` `【已实现】`**
+
+- 说明：点赞或取消点赞游记。
+- 响应 `data` 示例：
+
+```json
+{
+  "liked": true,
+  "likes": 12
+}
+```
+
+**### GET `/api/posts/{id}/comments` `【已实现】`**
+
+- 说明：分页查询游记评论。
+- Query 参数：
+  - `page`：页码，默认 `1`
+  - `size`：每页数量，默认 `10`
+- 响应 `data`：分页对象，`list` 内为 `CommentDTO`
+
+**### POST `/api/posts/{id}/comments` `【已实现】`**
+
+- 说明：发表游记评论。
+- 请求体：
+
+```json
+{
+  "content": "这条路线很实用，已收藏。",
+  "parent_id": null
+}
+```
+
+- 响应 `data`：新建的 `CommentDTO`
+
+**### DELETE `/api/posts/{postId}/comments/{commentId}` `【已实现】`**
+
+- 说明：软删除游记评论或回复，仅评论/回复发布者或管理员可操作。
+- 响应 `data`：`true`
+
+### 7.3 问答社区
+
+**### GET `/api/questions` `【已实现】`**
+
+- 说明：分页查询问答列表。
+- Query 参数：
+  - `page`：页码，默认 `1`
+  - `size`：每页数量，默认 `10`
+  - `keyword`：按标题或内容搜索，可选
+- 响应 `data`：分页对象，`list` 内为 `QuestionDTO`
+
+**### POST `/api/questions` `【已实现】`**
+
+- 说明：发布问题。
+- 请求体：
+
+```json
+{
+  "title": "第一次去成都住哪里方便？",
+  "content": "想吃小吃、坐地铁方便，预算中等。"
+}
+```
+
+- 响应 `data`：新建的 `QuestionDTO`
+
+**### GET `/api/questions/{id}` `【已实现】`**
+
+- 说明：查询问题详情。
+- 响应 `data`：`QuestionDTO`
+
+**### POST `/api/questions/{id}/answer` `【已实现】`**
+
+- 说明：回答问题。
+- 请求体：
+
+```json
+{
+  "answer": "可以优先看春熙路、宽窄巷子或太古里周边。"
+}
+```
+
+- 响应 `data`：更新后的 `QuestionDTO`
 
   
 

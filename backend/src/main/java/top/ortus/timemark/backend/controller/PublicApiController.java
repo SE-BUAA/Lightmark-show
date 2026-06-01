@@ -21,7 +21,10 @@ import top.ortus.timemark.backend.dto.module.QuestionDTO;
 import top.ortus.timemark.backend.dto.module.ReviewDTO;
 import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
 import top.ortus.timemark.backend.exception.ApiException;
+import top.ortus.timemark.backend.security.UserIdentity;
 import top.ortus.timemark.backend.service.FlightSearchService;
+import top.ortus.timemark.backend.service.CommunityService;
+import top.ortus.timemark.backend.service.ItineraryService;
 
 import java.util.List;
 import java.util.Map;
@@ -32,10 +35,17 @@ public class PublicApiController {
 
     private final FlightSearchService flightSearchService;
     private final JwtTokenService jwtTokenService;
+    private final ItineraryService itineraryService;
+    private final CommunityService communityService;
 
-    public PublicApiController(FlightSearchService flightSearchService, JwtTokenService jwtTokenService) {
+    public PublicApiController(FlightSearchService flightSearchService,
+                               JwtTokenService jwtTokenService,
+                               ItineraryService itineraryService,
+                               CommunityService communityService) {
         this.flightSearchService = flightSearchService;
         this.jwtTokenService = jwtTokenService;
+        this.itineraryService = itineraryService;
+        this.communityService = communityService;
     }
 
     @GetMapping("/products")
@@ -151,105 +161,126 @@ public class PublicApiController {
     }
 
     @GetMapping("/itinerary/my-plans")
-    public ApiResponse<PageResponse<TravelPlanDTO>> myPlans(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+    public ApiResponse<PageResponse<TravelPlanDTO>> myPlans(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                            @RequestParam Map<String, String> params) {
+        return ApiResponse.ok(itineraryService.listMyPlans(resolveUserId(authorization), params));
     }
 
     @PostMapping("/itinerary/plans")
-    public ApiResponse<TravelPlanDTO> createPlan(@RequestBody TravelPlanDTO payload) {
-        return ApiResponse.ok(payload == null ? new TravelPlanDTO() : payload);
+    public ApiResponse<TravelPlanDTO> createPlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                 @RequestBody TravelPlanDTO payload) {
+        return ApiResponse.ok(itineraryService.createPlan(resolveUserId(authorization), payload));
     }
 
     @PutMapping("/itinerary/plans/{id}")
-    public ApiResponse<TravelPlanDTO> updatePlan(@PathVariable String id, @RequestBody TravelPlanDTO payload) {
-        if (payload == null) {
-            payload = new TravelPlanDTO();
-        }
-        payload.setId(id);
-        return ApiResponse.ok(payload);
+    public ApiResponse<TravelPlanDTO> updatePlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                 @PathVariable Long id,
+                                                 @RequestBody TravelPlanDTO payload) {
+        return ApiResponse.ok(itineraryService.updatePlan(resolveUserId(authorization), id, payload));
     }
 
     @DeleteMapping("/itinerary/plans/{id}")
-    public ApiResponse<Boolean> deletePlan(@PathVariable String id) {
-        return ApiResponse.ok(true);
+    public ApiResponse<Boolean> deletePlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                           @PathVariable Long id) {
+        return ApiResponse.ok(itineraryService.deletePlan(resolveUserId(authorization), id));
     }
 
     @PostMapping("/itinerary/ai/generate")
-    public ApiResponse<TravelPlanDTO> generatePlan(@RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(new TravelPlanDTO());
+    public ApiResponse<TravelPlanDTO> generatePlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                   @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok(itineraryService.generatePlan(resolveUserId(authorization), payload));
     }
 
     @GetMapping("/itinerary/plans/{id}/share")
-    public ApiResponse<Map<String, String>> sharePlan(@PathVariable String id) {
-        return ApiResponse.ok(Map.of("shortLink", "/share/" + id));
+    public ApiResponse<Map<String, String>> sharePlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                      @PathVariable Long id) {
+        return ApiResponse.ok(itineraryService.sharePlan(resolveUserId(authorization), id));
     }
 
     @GetMapping("/itinerary/plans/{id}/export")
-    public ApiResponse<Map<String, String>> exportPlan(@PathVariable String id) {
-        return ApiResponse.ok(Map.of("fileUrl", "/exports/" + id + ".pdf"));
+    public ApiResponse<Map<String, String>> exportPlan(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                       @PathVariable Long id) {
+        return ApiResponse.ok(itineraryService.exportPlan(resolveUserId(authorization), id));
     }
 
     @GetMapping("/posts")
-    public ApiResponse<PageResponse<PostDTO>> posts(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+    public ApiResponse<PageResponse<PostDTO>> posts(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                    @RequestParam Map<String, String> params) {
+        return ApiResponse.ok(communityService.listPosts(resolveUserId(authorization), params));
     }
 
     @GetMapping("/posts/{id}")
-    public ApiResponse<PostDTO> post(@PathVariable String id) {
-        return ApiResponse.ok(new PostDTO());
+    public ApiResponse<PostDTO> post(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                     @PathVariable Long id) {
+        return ApiResponse.ok(communityService.getPost(resolveUserId(authorization), id));
     }
 
     @PostMapping("/posts")
-    public ApiResponse<PostDTO> createPost(@RequestBody PostDTO payload) {
-        return ApiResponse.ok(payload == null ? new PostDTO() : payload);
+    public ApiResponse<PostDTO> createPost(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                           @RequestBody PostDTO payload) {
+        return ApiResponse.ok(communityService.createPost(resolveUserId(authorization), payload));
     }
 
     @PutMapping("/posts/{id}")
-    public ApiResponse<PostDTO> updatePost(@PathVariable String id, @RequestBody PostDTO payload) {
-        if (payload == null) {
-            payload = new PostDTO();
-        }
-        return ApiResponse.ok(payload);
+    public ApiResponse<PostDTO> updatePost(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                           @PathVariable Long id,
+                                           @RequestBody PostDTO payload) {
+        return ApiResponse.ok(communityService.updatePost(resolveUserId(authorization), id, payload));
     }
 
     @DeleteMapping("/posts/{id}")
-    public ApiResponse<Boolean> deletePost(@PathVariable String id) {
-        return ApiResponse.ok(true);
+    public ApiResponse<Boolean> deletePost(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                           @PathVariable Long id) {
+        return ApiResponse.ok(communityService.deletePost(resolveUserId(authorization), resolveAdmin(authorization), id));
     }
 
     @PostMapping("/posts/{id}/like")
-    public ApiResponse<Boolean> likePost(@PathVariable String id) {
-        return ApiResponse.ok(true);
+    public ApiResponse<Map<String, Object>> likePost(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                     @PathVariable Long id) {
+        return ApiResponse.ok(communityService.togglePostLike(resolveUserId(authorization), id));
     }
 
     @GetMapping("/posts/{id}/comments")
-    public ApiResponse<PageResponse<CommentDTO>> postComments(@PathVariable String id, @RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+    public ApiResponse<PageResponse<CommentDTO>> postComments(@PathVariable Long id, @RequestParam Map<String, String> params) {
+        return ApiResponse.ok(communityService.listPostComments(id, params));
     }
 
     @PostMapping("/posts/{id}/comments")
-    public ApiResponse<CommentDTO> createComment(@PathVariable String id, @RequestBody CommentDTO payload) {
-        return ApiResponse.ok(payload == null ? new CommentDTO() : payload);
+    public ApiResponse<CommentDTO> createComment(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                 @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
+                                                 @PathVariable Long id,
+                                                 @RequestBody CommentDTO payload) {
+        return ApiResponse.ok(communityService.createPostComment(resolveUserId(authorization), id, payload, forwardedFor));
+    }
+
+    @DeleteMapping("/posts/{postId}/comments/{commentId}")
+    public ApiResponse<Boolean> deleteComment(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                              @PathVariable Long postId,
+                                              @PathVariable Long commentId) {
+        return ApiResponse.ok(communityService.deletePostComment(resolveUserId(authorization), resolveAdmin(authorization), postId, commentId));
     }
 
     @GetMapping("/questions")
     public ApiResponse<PageResponse<QuestionDTO>> questions(@RequestParam Map<String, String> params) {
-        return ApiResponse.ok(emptyPage());
+        return ApiResponse.ok(communityService.listQuestions(params));
     }
 
     @PostMapping("/questions")
-    public ApiResponse<QuestionDTO> createQuestion(@RequestBody QuestionDTO payload) {
-        return ApiResponse.ok(payload == null ? new QuestionDTO() : payload);
+    public ApiResponse<QuestionDTO> createQuestion(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                   @RequestBody QuestionDTO payload) {
+        return ApiResponse.ok(communityService.createQuestion(resolveUserId(authorization), payload));
     }
 
     @GetMapping("/questions/{id}")
-    public ApiResponse<QuestionDTO> question(@PathVariable String id) {
-        return ApiResponse.ok(new QuestionDTO());
+    public ApiResponse<QuestionDTO> question(@PathVariable Long id) {
+        return ApiResponse.ok(communityService.getQuestion(id));
     }
 
     @PostMapping("/questions/{id}/answer")
-    public ApiResponse<Boolean> answerQuestion(@PathVariable String id, @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(true);
+    public ApiResponse<QuestionDTO> answerQuestion(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                   @PathVariable Long id,
+                                                   @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok(communityService.answerQuestion(resolveUserId(authorization), id, payload));
     }
 
     @GetMapping("/reviews/orders/{orderNo}")
@@ -296,14 +327,24 @@ public class PublicApiController {
     }
 
     private Long resolveUserId(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new ApiException(401, "unauthorized");
-        }
-        Long userId = jwtTokenService.resolveUserId(authorization.substring("Bearer ".length()));
+        String token = resolveBearerToken(authorization);
+        Long userId = jwtTokenService.resolveUserId(token);
         if (userId == null) {
             throw new ApiException(401, "unauthorized");
         }
         return userId;
+    }
+
+    private boolean resolveAdmin(String authorization) {
+        String token = resolveBearerToken(authorization);
+        return jwtTokenService.resolveIdentity(token) == UserIdentity.ADMIN;
+    }
+
+    private String resolveBearerToken(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ApiException(401, "unauthorized");
+        }
+        return authorization.substring("Bearer ".length());
     }
 }
 

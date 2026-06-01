@@ -5,10 +5,12 @@ import java.time.LocalDateTime;
 public class PostDTO {
     private String id;
     private String user_id;
+    private String user_nickname;
     private String title;
     private String content;
     private String images;
     private int likes;
+    private boolean liked;
     private int comments_count;
     private int status;
     private LocalDateTime create_time;
@@ -31,6 +33,14 @@ public class PostDTO {
 
     public void setUser_id(String user_id) {
         this.user_id = user_id;
+    }
+
+    public String getUser_nickname() {
+        return user_nickname;
+    }
+
+    public void setUser_nickname(String user_nickname) {
+        this.user_nickname = user_nickname;
     }
 
     public String getTitle() {
@@ -63,6 +73,14 @@ public class PostDTO {
 
     public void setLikes(int likes) {
         this.likes = likes;
+    }
+
+    public boolean isLiked() {
+        return liked;
+    }
+
+    public void setLiked(boolean liked) {
+        this.liked = liked;
     }
 
     public int getComments_count() {
