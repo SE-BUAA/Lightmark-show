@@ -102,3 +102,61 @@ CREATE TABLE admin_log (
   create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE travel_plan (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  title VARCHAR(100) DEFAULT '',
+  destination VARCHAR(100) NOT NULL,
+  start_date DATE,
+  end_date DATE,
+  plan_data CLOB,
+  is_public TINYINT DEFAULT 0,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE post (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  content CLOB,
+  images CLOB,
+  likes INT DEFAULT 0,
+  comments_count INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE post_like (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  post_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (post_id, user_id)
+);
+
+CREATE TABLE comment (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  target_type VARCHAR(20) NOT NULL,
+  target_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  parent_id BIGINT,
+  content VARCHAR(1000) NOT NULL,
+  likes INT DEFAULT 0,
+  is_approved TINYINT DEFAULT 1,
+  ip VARCHAR(45),
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE question (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  content VARCHAR(500) NOT NULL,
+  answer VARCHAR(1000),
+  answer_user_id BIGINT,
+  status TINYINT DEFAULT 0,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  answer_time TIMESTAMP
+);
+

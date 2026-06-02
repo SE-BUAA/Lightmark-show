@@ -7,6 +7,7 @@ public class CommentDTO {
     private String target_type;
     private String target_id;
     private String user_id;
+    private String user_nickname;
     private String parent_id;
     private String content;
     private int likes;
@@ -47,6 +48,14 @@ public class CommentDTO {
 
     public void setUser_id(String user_id) {
         this.user_id = user_id;
+    }
+
+    public String getUser_nickname() {
+        return user_nickname;
+    }
+
+    public void setUser_nickname(String user_nickname) {
+        this.user_nickname = user_nickname;
     }
 
     public String getParent_id() {

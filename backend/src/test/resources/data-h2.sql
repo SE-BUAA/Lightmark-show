@@ -57,3 +57,17 @@ INSERT INTO product (id, product_type, name, price, stock, sold_count, status, e
 (1114, 'FLIGHT', 'DBG1114 深圳宝安-西安咸阳 初冬', 520.00, 18, 8, 1, '{"airline":"春秋航空","flightNo":"DBG1114","departureCity":"SZX","departureAirport":"SZX","arrivalCity":"XIY","arrivalAirport":"XIY","departureDate":"2026-11-06","departureTime":"21:30","arrivalTime":"00:10","stops":0,"aircraft":"A320","cabins":[{"type":"ECONOMY","name":"经济舱"}],"baggage":"15kg","refundRule":"低价舱位退改费用较高"}'),
 (1115, 'FLIGHT', 'DBG1115 上海虹桥-北京大兴 跨年返程', 680.00, 34, 25, 1, '{"airline":"吉祥航空","flightNo":"DBG1115","departureCity":"SHA","departureAirport":"SHA","arrivalCity":"BJS","arrivalAirport":"PKX","departureDate":"2026-12-31","departureTime":"18:30","arrivalTime":"20:45","stops":0,"aircraft":"A320","cabins":[{"type":"ECONOMY","name":"经济舱"}],"baggage":"20kg","refundRule":"起飞前24小时外收取15%手续费"}');
 
+INSERT INTO travel_plan (id, user_id, title, destination, start_date, end_date, plan_data, is_public) VALUES
+(1, 2, '杭州三日慢游', '杭州', '2026-07-01', '2026-07-03', '[{"day":1,"theme":"西湖初见","items":["抵达杭州","漫步白堤","湖滨晚餐"]}]', 1);
+
+INSERT INTO post (id, user_id, title, content, images, likes, comments_count, status) VALUES
+(1, 2, '杭州三日慢游路线分享', '西湖适合留出完整半天，龙井村建议上午去。', '["https://picsum.photos/id/104/640/420"]', 1, 1, 1);
+
+INSERT INTO post_like (post_id, user_id) VALUES
+(1, 1);
+
+INSERT INTO comment (id, target_type, target_id, user_id, content) VALUES
+(1, 'POST', 1, 1, '这条路线很实用，已收藏。');
+
+INSERT INTO question (id, user_id, title, content, answer, answer_user_id, status, answer_time) VALUES
+(1, 2, '第一次去成都住哪里方便？', '想吃小吃、坐地铁方便，预算中等。', '可以优先看春熙路、宽窄巷子或太古里周边。', 1, 1, CURRENT_TIMESTAMP);
