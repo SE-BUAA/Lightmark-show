@@ -4,4 +4,7 @@ frontend/API.md
 .claude
 .history
 .env
-
+package-project.ps1
+deploy-server.sh
+timemark.tar.gz
+uninstall-server.sh
