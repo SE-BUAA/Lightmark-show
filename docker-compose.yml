@@ -1,0 +1,54 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lightmark-backend
+    environment:
+      SERVER_PORT: 8080
+
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-lightmark}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-timemark}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-120}
+
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    expose:
+      - "8080"
+    restart: unless-stopped
+    networks:
+      - lightmark-net
+
+  frontend-builder:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lightmark-frontend-builder
+    command: ["sh", "-c", "echo frontend build done"]
+    restart: "no"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: lightmark-nginx
+    depends_on:
+      - backend
+    ports:
+      - "2053:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./deploy/certs/origin.crt:/etc/nginx/certs/origin.crt:ro
+      - ./deploy/certs/origin.key:/etc/nginx/certs/origin.key:ro
+    restart: unless-stopped
+    networks:
+      - lightmark-net
+
+networks:
+  lightmark-net:
+    driver: bridge

@@ -512,8 +512,29 @@ interface ProductDTO {
   extra?: string;
 }
 
+interface FlightExtraInfo {
+  stops?: number | string;
+  departureTime?: string;
+  arrivalTime?: string;
+  airline?: string;
+  refundRule?: string;
+  departureCity?: string;
+  departure_city?: string;
+  departure?: string;
+  arrivalCity?: string;
+  arrival_city?: string;
+  arrival?: string;
+  departureAirport?: string;
+  departure_airport?: string;
+  departureAirportCode?: string;
+  arrivalAirport?: string;
+  arrival_airport?: string;
+  arrivalAirportCode?: string;
+  [key: string]: unknown;
+}
+
 interface FlightProduct extends ProductDTO {
-  extraInfo: Record<string, any>;
+  extraInfo: FlightExtraInfo;
 }
 
 interface CalendarDay {
@@ -794,7 +815,6 @@ const sortLabel = computed(() => {
 const statusTagType = computed(() => (orderStatus.value?.status === 1 ? "success" : orderStatus.value?.status === 4 ? "warning" : "info"));
 const hasActiveOrder = computed(() => Boolean(currentOrderNo.value) && ![2, 4].includes(Number(orderStatus.value?.status)));
 const availableCalendarDays = computed(() => calendarDays.value.filter((day) => day.available && Number(day.lowestPrice) > 0));
-const todayCalendarDay = computed(() => calendarDays.value.find((day) => day.date === today));
 const lowestCalendarDay = computed(() => {
   return availableCalendarDays.value.reduce<CalendarDay | undefined>((lowest, day) => {
     if (!lowest || Number(day.lowestPrice) < Number(lowest.lowestPrice)) return day;
@@ -1202,7 +1222,7 @@ function buildOrderPayload() {
 
 // 下单前统一裁剪空白，避免前端校验通过但后端保存带空格的乘机人信息。
 function normalizedPassengers() {
-  return passengers.value.map(({ key, ...item }) => ({
+  return passengers.value.map(({ ...item }) => ({
     ...item,
     name: item.name.trim(),
     idNo: item.idNo.trim(),
@@ -1212,7 +1232,7 @@ function normalizedPassengers() {
 
 // 航班扩展字段历史上有 camelCase 和 snake_case 两种命名，这里统一成页面使用的字段。
 function normalizeFlight(product: ProductDTO): FlightProduct {
-  let extraInfo: Record<string, any> = {};
+  let extraInfo: FlightExtraInfo = {};
   try {
     extraInfo = product.extra ? JSON.parse(product.extra) : {};
   } catch {
@@ -1347,7 +1367,7 @@ function focusSelectedCalendarMonth() {
   scrollCalendarMonthIntoView(activeDepartureMonth.value);
 }
 
-function scrollCalendarMonthIntoView(month: string, behavior: ScrollBehavior = "smooth") {
+function scrollCalendarMonthIntoView(month: string, behavior: "auto" | "smooth" = "smooth") {
   nextTick(() => {
     const panel = calendarScrollerRef.value?.querySelector<HTMLElement>(`[data-calendar-month="${month}"]`);
     panel?.scrollIntoView({ behavior, block: "nearest", inline: "start" });
