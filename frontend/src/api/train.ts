@@ -24,6 +24,20 @@ export interface TrainOptions {
   dates: string[]
 }
 
+export interface TrainCalendarPayload {
+  startStation?: string
+  endStation?: string
+  month?: string
+  trainTypes: string[]
+  seatTypes: string[]
+}
+
+export interface TrainCalendarDay {
+  date: string
+  ticketCount: number
+  trainCount: number
+}
+
 export interface TrainOrderPayload {
   productId: string
   passengerName: string
@@ -85,6 +99,16 @@ export function getTrainOptions() {
 
 export function searchTrains(data: TrainSearchPayload) {
   return http.post<TrainProduct[]>('/trains/search', data)
+}
+
+export function getTrainCalendar(data: TrainCalendarPayload) {
+  const params = new URLSearchParams()
+  if (data.startStation) params.append('startStation', data.startStation)
+  if (data.endStation) params.append('endStation', data.endStation)
+  if (data.month) params.append('month', data.month)
+  data.trainTypes.forEach((item) => params.append('trainTypes', item))
+  data.seatTypes.forEach((item) => params.append('seatTypes', item))
+  return http.get<TrainCalendarDay[]>('/trains/calendar', { params })
 }
 
 export function createTrainOrder(data: TrainOrderPayload) {
