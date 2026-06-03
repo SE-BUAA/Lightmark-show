@@ -28,27 +28,50 @@ if [[ ! -f "$ARCHIVE_PATH" ]]; then
   exit 1
 fi
 
-echo "[1/5] Preparing target directory: $TARGET_DIR"
+echo "[1/6] Preparing target directory: $TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
-echo "[2/5] Cleaning old files (keeping .env if exists)"
+echo "[2/6] Cleaning old files (keeping .env if exists)"
 if [[ -f "$TARGET_DIR/.env" ]]; then
   find "$TARGET_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
 else
   rm -rf "$TARGET_DIR"/*
 fi
 
-echo "[3/5] Extracting archive: $ARCHIVE_PATH"
-# Archive from package-project.ps1 contains project contents at root level
-tar -xzf "$ARCHIVE_PATH" -C "$TARGET_DIR"
+echo "[3/6] Extracting archive: $ARCHIVE_PATH"
+# Extract into a temp directory first to avoid tar metadata errors on the target dir,
+# then copy the project contents into the deploy directory.
+TMP_EXTRACT_DIR="$(mktemp -d "${ARCHIVE_DIR}/timemark-extract.XXXXXX")"
+cleanup() {
+  rm -rf "$TMP_EXTRACT_DIR"
+}
+trap cleanup EXIT
 
-echo "[4/5] Starting containers"
+tar -xzf "$ARCHIVE_PATH" -C "$TMP_EXTRACT_DIR"
+cp -r "$TMP_EXTRACT_DIR"/. "$TARGET_DIR"/
+
 cd "$TARGET_DIR"
-docker compose up -d --build
 
-echo "[5/5] Done"
+echo "[4/6] Building frontend dist explicitly"
+docker compose run --rm frontend-builder
+
+if [[ ! -f "$TARGET_DIR/frontend/dist/index.html" ]]; then
+  echo "[ERROR] frontend build did not produce frontend/dist/index.html"
+  exit 1
+fi
+
+echo "[5/6] Starting backend and recreating nginx"
+docker compose up -d --build backend
+docker compose rm -sf nginx >/dev/null 2>&1 || true
+docker compose up -d nginx
+
+echo "[6/6] Done"
 docker compose ps
 
+echo "\nQuick checks:"
+echo "  docker compose exec nginx ls -lah /usr/share/nginx/html"
+echo "  curl -k -I https://127.0.0.1/"
+echo "  curl -k -I https://127.0.0.1/api/health"
 echo "\nLogs (optional):"
 echo "  docker compose logs -f backend"
 echo "  docker compose logs -f nginx"
