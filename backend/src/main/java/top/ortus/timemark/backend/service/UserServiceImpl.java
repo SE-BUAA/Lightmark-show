@@ -64,6 +64,8 @@ public class UserServiceImpl implements UserService {
         user.setPassword(request.getPassword());
         user.setNickname(valueOrDefault(request.getNickname(), ""));
         user.setAvatar(valueOrDefault(request.getAvatar(), ""));
+        user.setGender(request.getGender());
+        user.setBirth_date(request.getBirth_date());
         user.setPoints(valueOrDefault(request.getPoints(), 0));
         user.setLevel(valueOrDefault(request.getLevel(), (short) 0));
         user.setStatus(valueOrDefault(request.getStatus(), 0));
@@ -97,6 +99,12 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getAvatar() != null) {
             user.setAvatar(request.getAvatar());
+        }
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
+        if (request.getBirth_date() != null) {
+            user.setBirth_date(request.getBirth_date());
         }
         if (request.getPoints() != null) {
             user.setPoints(request.getPoints());

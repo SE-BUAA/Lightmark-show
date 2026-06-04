@@ -80,6 +80,8 @@ timemark:
     secret: ${JWT_SECRET:timemark-secret-key-please-change}
     issuer: ${JWT_ISSUER:timemark}
     expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+  object-storage:
+    base-url: ${OBJECT_STORAGE_BASE_URL:}
   membership:
     levels:
       - level: 0

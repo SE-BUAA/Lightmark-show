@@ -171,6 +171,8 @@ public class UserRepositoryImpl implements UserRepository {
         putIfPresent(payload, "password", user.getPassword());
         putIfPresent(payload, "nickname", user.getNickname());
         putIfPresent(payload, "avatar", user.getAvatar());
+        putIfPresent(payload, "gender", user.getGender());
+        putIfPresent(payload, "birth_date", user.getBirth_date());
         putIfPresent(payload, "points", user.getPoints());
         putIfPresent(payload, "level", user.getLevel());
         putIfPresent(payload, "status", user.getStatus());

@@ -30,6 +30,8 @@ public class UserConverter {
                 user.getEmail(),
                 user.getNickname(),
                 user.getAvatar(),
+                user.getGender(),
+                user.getBirth_date(),
                 user.getPoints(),
                 user.getLevel(),
                 user.getStatus(),

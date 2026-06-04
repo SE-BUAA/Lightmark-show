@@ -5,9 +5,19 @@
       <div class="container">
         <div class="profile-header">
           <div class="profile-avatar-wrap">
-            <span class="profile-avatar">{{
-              displayName.charAt(0) || "?"
-            }}</span>
+            <button class="avatar-button" @click="triggerAvatarUpload">
+              <img v-if="avatarUrl" :src="avatarUrl" class="profile-avatar-img" />
+              <span v-else class="profile-avatar">{{
+                displayName.charAt(0) || "?"
+              }}</span>
+            </button>
+            <input
+              ref="avatarInput"
+              class="avatar-input"
+              type="file"
+              accept="image/*"
+              @change="handleAvatarSelected"
+            />
           </div>
           <div class="profile-meta">
             <h1>{{ displayName || "未设置昵称" }}</h1>
@@ -48,6 +58,18 @@
                 />
               </div>
               <div class="form-field">
+                <label>性别</label>
+                <select v-model="editForm.gender" class="form-input">
+                  <option :value="0">未设置</option>
+                  <option :value="1">男</option>
+                  <option :value="2">女</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>出生日期</label>
+                <input v-model="editForm.birth_date" type="date" class="form-input" />
+              </div>
+              <div class="form-field">
                 <label>手机号</label>
                 <input
                   v-model="editForm.phone"
@@ -77,6 +99,14 @@
               <div class="info-row">
                 <span class="info-label">昵称</span>
                 <span class="info-value">{{ displayName || "未设置" }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">性别</span>
+                <span class="info-value">{{ genderText }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">出生日期</span>
+                <span class="info-value">{{ userBirthDate || "未设置" }}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">手机号</span>
@@ -131,6 +161,37 @@
             <button class="quick-item quick-logout" @click="handleLogout">
               <span class="quick-icon">🚪</span>
               <span>退出登录</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-grid profile-grid-2">
+        <div class="profile-card">
+          <div class="card-header">
+            <h3>自然语言修改个人信息</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-field">
+              <label>输入指令</label>
+              <input
+                v-model="nlText"
+                type="text"
+                class="form-input"
+                placeholder="例如：把昵称改成小李"
+              />
+            </div>
+            <button class="btn btn-secondary btn-save" @click="parseNlUpdate">
+              解析
+            </button>
+            <div v-if="nlPreview" class="nl-preview">{{ nlPreview }}</div>
+            <button
+              v-if="nlParsed"
+              class="btn btn-primary btn-save"
+              @click="confirmNlUpdate"
+              :disabled="nlSaving"
+            >
+              {{ nlSaving ? "提交中..." : "确认修改" }}
             </button>
           </div>
         </div>
@@ -321,6 +382,7 @@ import {
   getPointsLogs,
   getTravelers,
   getUserOrders,
+  uploadAvatarFile,
   updateCurrentUser,
   updateTraveler,
 } from "@/api/user";
@@ -342,12 +404,18 @@ const userPhone = ref("");
 const userEmail = ref("");
 const userPoints = ref(0);
 const userLevel = ref(0);
+const userGender = ref(0);
+const userBirthDate = ref("");
+const avatarUrl = ref("");
 
 const displayName = computed(() => authStore.nickname || "");
 const accountInfo = computed(() => {
   if (userPhone.value) return userPhone.value;
   if (userEmail.value) return userEmail.value;
-  return "用户ID: " + authStore.userId;
+  const raw = authStore.userId || "";
+  const formatted =
+    raw && /^\d+$/.test(raw) ? raw.padStart(16, "0").slice(-16) : raw;
+  return "用户ID: " + formatted;
 });
 
 const levelText = computed(() => {
@@ -355,8 +423,16 @@ const levelText = computed(() => {
   return levels[userLevel.value] || "普通会员";
 });
 
+const genderText = computed(() => {
+  if (userGender.value === 1) return "男";
+  if (userGender.value === 2) return "女";
+  return "未设置";
+});
+
 const editForm = ref({
   nickname: "",
+  gender: 0,
+  birth_date: "",
   phone: "",
   email: "",
 });
@@ -382,6 +458,92 @@ const passwordForm = ref({
 });
 const passwordSaving = ref(false);
 
+const avatarInput = ref<HTMLInputElement | null>(null);
+const avatarUploading = ref(false);
+
+const triggerAvatarUpload = () => {
+  avatarInput.value?.click();
+};
+
+const handleAvatarSelected = async (e: Event) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  avatarUploading.value = true;
+  try {
+    const res = await uploadAvatarFile(file);
+    avatarUrl.value = res.avatarUrl || "";
+    authStore.updateLocalProfile({ avatar: avatarUrl.value });
+    ElMessage.success("头像已更新");
+  } catch {
+    ElMessage.error("头像上传失败");
+  } finally {
+    avatarUploading.value = false;
+  }
+};
+
+type NlParsed = { field: "nickname" | "email" | "phone"; value: string };
+const nlText = ref("");
+const nlParsed = ref<NlParsed | null>(null);
+const nlPreview = ref("");
+const nlSaving = ref(false);
+
+const formatUserId16 = () => {
+  const raw = authStore.userId || "";
+  return raw && /^\d+$/.test(raw) ? raw.padStart(16, "0").slice(-16) : raw;
+};
+
+const parseNlUpdate = () => {
+  const text = nlText.value.trim();
+  nlParsed.value = null;
+  nlPreview.value = "";
+  if (!text) return;
+  const nicknameMatch = text.match(/昵称.*?(改成|改为|修改为)\s*([^\s，。]+)$/);
+  const emailMatch = text.match(/邮箱.*?(改成|改为|修改为)\s*([^\s，。]+)$/);
+  const phoneMatch = text.match(/(手机号|手机).*?(改成|改为|修改为)\s*(\d{6,})$/);
+
+  if (nicknameMatch) {
+    nlParsed.value = { field: "nickname", value: nicknameMatch[2] };
+    nlPreview.value = `将用户ID ${formatUserId16()} 的昵称修改为：${nicknameMatch[2]}`;
+    return;
+  }
+  if (emailMatch) {
+    nlParsed.value = { field: "email", value: emailMatch[2] };
+    nlPreview.value = `将用户ID ${formatUserId16()} 的邮箱修改为：${emailMatch[2]}`;
+    return;
+  }
+  if (phoneMatch) {
+    nlParsed.value = { field: "phone", value: phoneMatch[3] };
+    nlPreview.value = `将用户ID ${formatUserId16()} 的手机号修改为：${phoneMatch[3]}`;
+    return;
+  }
+  nlPreview.value = "未识别到可修改字段，目前支持昵称/邮箱/手机号";
+};
+
+const confirmNlUpdate = async () => {
+  if (!nlParsed.value) return;
+  nlSaving.value = true;
+  try {
+    const payload: Record<string, unknown> = {};
+    payload[nlParsed.value.field] = nlParsed.value.value;
+    const res = await updateCurrentUser(payload);
+    authStore.updateLocalProfile({
+      nickname: res.nickname,
+      avatar: res.avatar,
+    });
+    await fetchUserProfile();
+    nlText.value = "";
+    nlParsed.value = null;
+    nlPreview.value = "";
+    ElMessage.success("修改成功");
+  } catch {
+    ElMessage.error("修改失败");
+  } finally {
+    nlSaving.value = false;
+  }
+};
+
 // 获取用户详情 — GET /api/user/current
 const fetchUserProfile = async () => {
   if (!authStore.userId) return;
@@ -391,9 +553,15 @@ const fetchUserProfile = async () => {
     userEmail.value = res.email || "";
     userPoints.value = res.points ?? 0;
     userLevel.value = res.level ?? 0;
+    userGender.value = res.gender ?? 0;
+    userBirthDate.value = res.birth_date || "";
+    avatarUrl.value = res.avatar || "";
     editForm.value.nickname = res.nickname || authStore.nickname || "";
+    editForm.value.gender = res.gender ?? 0;
+    editForm.value.birth_date = res.birth_date || "";
     editForm.value.phone = res.phone || "";
     editForm.value.email = res.email || "";
+    authStore.updateLocalProfile({ avatar: res.avatar || "" });
   } catch {
     // 获取失败时使用 auth store 的数据
     editForm.value.nickname = authStore.nickname || "";
@@ -506,13 +674,19 @@ const saveProfile = async () => {
       nickname: editForm.value.nickname,
       phone: editForm.value.phone,
       email: editForm.value.email,
+      gender: editForm.value.gender,
+      birth_date: editForm.value.birth_date || undefined,
     });
     // 更新本地 store 与 localStorage
     authStore.updateLocalProfile({
       nickname: res.nickname || editForm.value.nickname,
+      avatar: res.avatar,
     });
     userPhone.value = res.phone || "";
     userEmail.value = res.email || "";
+    userGender.value = res.gender ?? 0;
+    userBirthDate.value = res.birth_date || "";
+    avatarUrl.value = res.avatar || "";
     ElMessage.success("保存成功");
     editing.value = false;
   } catch {
@@ -595,6 +769,27 @@ onMounted(() => {
 
 .profile-avatar-wrap {
   flex-shrink: 0;
+}
+
+.avatar-button {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-input {
+  display: none;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile-avatar {
@@ -808,6 +1003,12 @@ onMounted(() => {
 .profile-grid-2 {
   margin-top: 24px;
   grid-template-columns: 1fr 1fr;
+}
+
+.nl-preview {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--slate-700);
 }
 
 .empty {

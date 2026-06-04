@@ -16,6 +16,8 @@ export interface UserCurrentDTO {
   email: string;
   nickname: string;
   avatar: string;
+  gender?: number;
+  birth_date?: string;
   points: number;
   level: number;
   identity: string;
@@ -28,6 +30,8 @@ export interface UserUpdateRequest {
   nickname?: string;
   phone?: string;
   email?: string;
+  gender?: number;
+  birth_date?: string;
 }
 
 /** 出行人DTO */
@@ -111,6 +115,16 @@ export const updateAvatar = (
   avatarUrl: string
 ): Promise<{ avatarUrl: string }> => {
   return http.post<{ avatarUrl: string }>("/user/avatar", { avatarUrl });
+};
+
+export const uploadAvatarFile = (
+  file: File
+): Promise<{ avatarUrl: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return http.post<{ avatarUrl: string }>("/user/avatar/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 };
 
 /**
