@@ -1,6 +1,7 @@
 package top.ortus.timemark.backend.dto;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 public class UserDTO {
     private String id;
@@ -9,6 +10,8 @@ public class UserDTO {
     private String nickname;
 
     private String avatar;
+    private Integer gender;
+    private LocalDate birth_date;
     private int points;
     private short level;
     private int status;
@@ -22,14 +25,16 @@ public class UserDTO {
     public UserDTO() {
     }
 
-    public UserDTO(String id, String phone, String email, String nickname, String avatar, int points, short level,
-                   int status, String register_source, LocalDateTime last_login_time, String last_login_ip,
+    public UserDTO(String id, String phone, String email, String nickname, String avatar, Integer gender, LocalDate birth_date,
+                   int points, short level, int status, String register_source, LocalDateTime last_login_time, String last_login_ip,
                    LocalDateTime create_time, LocalDateTime update_time, boolean deleted) {
         this.id = id;
         this.phone = phone;
         this.email = email;
         this.nickname = nickname;
         this.avatar = avatar;
+        this.gender = gender;
+        this.birth_date = birth_date;
         this.points = points;
         this.level = level;
         this.status = status;
@@ -79,6 +84,22 @@ public class UserDTO {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public Integer getGender() {
+        return gender;
+    }
+
+    public void setGender(Integer gender) {
+        this.gender = gender;
+    }
+
+    public LocalDate getBirth_date() {
+        return birth_date;
+    }
+
+    public void setBirth_date(LocalDate birth_date) {
+        this.birth_date = birth_date;
     }
 
     public int getPoints() {

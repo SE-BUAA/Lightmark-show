@@ -11,6 +11,8 @@ public class UserCurrentDTO {
     private String email;
     private String nickname;
     private String avatar;
+    private Integer gender;
+    private java.time.LocalDate birth_date;
     private int points;
     private short level;
     private String identity;
@@ -27,6 +29,8 @@ public class UserCurrentDTO {
             this.email = user.getEmail();
             this.nickname = user.getNickname();
             this.avatar = user.getAvatar();
+            this.gender = user.getGender();
+            this.birth_date = user.getBirth_date();
             this.points = user.getPoints();
             this.level = user.getLevel();
         }
@@ -73,6 +77,22 @@ public class UserCurrentDTO {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public Integer getGender() {
+        return gender;
+    }
+
+    public void setGender(Integer gender) {
+        this.gender = gender;
+    }
+
+    public java.time.LocalDate getBirth_date() {
+        return birth_date;
+    }
+
+    public void setBirth_date(java.time.LocalDate birth_date) {
+        this.birth_date = birth_date;
     }
 
     public int getPoints() {

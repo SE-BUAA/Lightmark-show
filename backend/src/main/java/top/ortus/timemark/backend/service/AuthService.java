@@ -12,6 +12,7 @@ import top.ortus.timemark.backend.dto.auth.AuthRegisterRequest;
 import top.ortus.timemark.backend.dto.auth.AuthTokenDTO;
 import top.ortus.timemark.backend.exception.ApiException;
 import top.ortus.timemark.backend.security.UserIdentity;
+import top.ortus.timemark.backend.utils.UserIdFormatter;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -105,6 +106,6 @@ public class AuthService {
         UserIdentity identity = userRepositoryImpl.findIdentityByUserId(user.getId());
         List<String> roles = List.of(identity.name());
         String token = jwtTokenService.createToken(Long.valueOf(user.getId()), user.getNickname(), identity);
-        return new AuthTokenDTO(token, user.getId(), user.getNickname(), user.getAvatar(), identity.name(), roles);
+        return new AuthTokenDTO(token, UserIdFormatter.format16(user.getId()), user.getNickname(), user.getAvatar(), identity.name(), roles);
     }
 }

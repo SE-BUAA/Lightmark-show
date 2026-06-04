@@ -40,6 +40,9 @@ public class DatabaseCompatibilityMigrator implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        addColumnIfMissing("user", "avatar", "ALTER TABLE `user` ADD COLUMN avatar VARCHAR(500) DEFAULT ''");
+        addColumnIfMissing("user", "gender", "ALTER TABLE `user` ADD COLUMN gender TINYINT DEFAULT 0");
+        addColumnIfMissing("user", "birth_date", "ALTER TABLE `user` ADD COLUMN birth_date DATE NULL");
         addColumnIfMissing("orders", "changed_once", "ALTER TABLE orders ADD COLUMN changed_once TINYINT DEFAULT 0");
         addColumnIfMissing("orders", "original_order_no", "ALTER TABLE orders ADD COLUMN original_order_no VARCHAR(32) NULL");
         normalizeVacationProducts();

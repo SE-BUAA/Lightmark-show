@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 import top.ortus.timemark.backend.JwtTokenService;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.common.PageResponse;
@@ -25,8 +27,10 @@ import top.ortus.timemark.backend.dto.user.UserUpdateRequest;
 import top.ortus.timemark.backend.exception.ApiException;
 import top.ortus.timemark.backend.service.GenericCrudService;
 import top.ortus.timemark.backend.service.MembershipService;
+import top.ortus.timemark.backend.service.ObjectStorageService;
 import top.ortus.timemark.backend.service.UserService;
 import top.ortus.timemark.backend.security.UserIdentity;
+import top.ortus.timemark.backend.utils.UserIdFormatter;
 
 import java.util.Collections;
 import java.util.List;
@@ -43,6 +47,7 @@ public class UserController {
     private final GenericCrudService genericCrudService;
     private final JwtTokenService jwtTokenService;
     private final MembershipService membershipService;
+    private final ObjectStorageService objectStorageService;
 
     /**
      * 构造函数
@@ -51,18 +56,22 @@ public class UserController {
     public UserController(UserService userService,
                           GenericCrudService genericCrudService,
                           JwtTokenService jwtTokenService,
-                          MembershipService membershipService) {
+                          MembershipService membershipService,
+                          ObjectStorageService objectStorageService) {
         this.userService = userService;
         this.genericCrudService = genericCrudService;
         this.jwtTokenService = jwtTokenService;
         this.membershipService = membershipService;
+        this.objectStorageService = objectStorageService;
     }
 
     @GetMapping("/current")
     public ApiResponse<UserCurrentDTO> current(@RequestHeader("Authorization") String authorization) {
         UserDTO user = resolveCurrentUser(authorization);
         UserIdentity identity = resolveIdentity(authorization);
-        return ApiResponse.ok(new UserCurrentDTO(user, identity, Collections.emptyList()));
+        UserCurrentDTO dto = new UserCurrentDTO(user, identity, Collections.emptyList());
+        dto.setId(UserIdFormatter.format16(dto.getId()));
+        return ApiResponse.ok(dto);
     }
 
     @PutMapping("/current")
@@ -78,6 +87,18 @@ public class UserController {
         updateRequest.setAvatar(request == null ? null : request.getAvatarUrl());
         userService.update(resolveUserId(authorization), updateRequest);
         return ApiResponse.ok(Map.of("avatarUrl", request == null ? "" : request.getAvatarUrl()));
+    }
+
+    @PostMapping(value = "/avatar/upload", consumes = "multipart/form-data")
+    public ApiResponse<Map<String, String>> uploadAvatarFile(@RequestHeader("Authorization") String authorization,
+                                                             @RequestPart("file") MultipartFile file) {
+        String userId = resolveUserId(authorization);
+        String normalizedUserId = UserIdFormatter.format16(userId);
+        String url = objectStorageService.uploadAvatar(normalizedUserId, file);
+        UserUpdateRequest updateRequest = new UserUpdateRequest();
+        updateRequest.setAvatar(url);
+        userService.update(userId, updateRequest);
+        return ApiResponse.ok(Map.of("avatarUrl", url));
     }
 
     @PutMapping("/password")

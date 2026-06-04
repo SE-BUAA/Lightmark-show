@@ -1,6 +1,7 @@
 package top.ortus.timemark.backend.dao;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * 用户实体类，对应数据库中的 user 表
@@ -12,6 +13,8 @@ public class User {
     private String nickname;
     private String password;
     private String avatar;
+    private Integer gender;
+    private LocalDate birth_date;
     private int points;
     private short level;
     private int status;
@@ -93,6 +96,22 @@ public class User {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public Integer getGender() {
+        return gender;
+    }
+
+    public void setGender(Integer gender) {
+        this.gender = gender;
+    }
+
+    public LocalDate getBirth_date() {
+        return birth_date;
+    }
+
+    public void setBirth_date(LocalDate birth_date) {
+        this.birth_date = birth_date;
     }
 
     public int getPoints() {
