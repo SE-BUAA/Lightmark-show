@@ -75,7 +75,7 @@
               </el-radio-button>
             </el-radio-group>
             <div class="quick-options">
-              <el-checkbox v-model="form.directOnly" @change="handleDirectOnlyChange">仅看直飞</el-checkbox>
+              <el-checkbox v-model="form.directOnly" :disabled="form.tripType === 'transfer'" @change="handleDirectOnlyChange">仅看直飞</el-checkbox>
               <el-checkbox v-model="form.lowPriceFirst" @change="searchFlights">低价优先</el-checkbox>
             </div>
           </div>
@@ -160,6 +160,46 @@
               搜索航班
             </el-button>
           </div>
+        </div>
+      </section>
+
+      <section class="special-fares flight-feature-card">
+        <div class="section-head compact">
+          <div>
+            <p>特价机票</p>
+            <h2>最近低价与线路规划</h2>
+          </div>
+          <div class="special-fare-actions">
+            <span>{{ specialFareDeals.length > 0 ? `${specialFareDeals.length} 个低价日期` : "等待价格日历" }}</span>
+            <button type="button" :disabled="availableCalendarDays.length <= 1" @click="refreshSpecialFares">
+              换一批
+            </button>
+          </div>
+        </div>
+        <div v-if="specialFareDeals.length > 0" class="special-fare-grid">
+          <button
+            v-for="deal in specialFareDeals"
+            :key="deal.date"
+            type="button"
+            class="special-fare-card"
+            @click="chooseSpecialFare(deal)"
+          >
+            <span>{{ deal.badge }}</span>
+            <strong>{{ calendarPriceText(deal) }}</strong>
+            <small>{{ calendarDayLabel(deal.date) }} · {{ lowFareRouteLabel }}</small>
+          </button>
+        </div>
+        <div v-if="lowPriceRoutePlans.length > 0" class="low-route-plans">
+          <button
+            v-for="plan in lowPriceRoutePlans"
+            :key="`${plan.mode}-${plan.date}`"
+            type="button"
+            @click="applyLowPricePlan(plan)"
+          >
+            <span>{{ plan.label }}</span>
+            <strong>{{ plan.title }}</strong>
+            <small>{{ plan.summary }}</small>
+          </button>
         </div>
       </section>
 
@@ -249,15 +289,23 @@
 
         <el-empty v-else-if="!calendarLoading" description="暂无价格趋势数据" />
 
-        <div v-if="calendarMonths.length > 0" class="calendar-months">
-          <button
-            v-for="month in calendarMonths"
-            :key="month"
-            type="button"
-            :class="{ active: activeCalendarMonth === month }"
-            @click="selectCalendarMonth(month)"
-          >
-            {{ calendarMonthLabel(month) }}
+        <div v-if="calendarMonths.length > 0" class="calendar-month-navigator">
+          <button type="button" class="calendar-nav-button" :disabled="!hasPreviousCalendarMonth" @click="changeCalendarMonth(-1)">
+            上一月
+          </button>
+          <div class="calendar-months" aria-label="价格日历月份">
+            <button
+              v-for="month in calendarMonths"
+              :key="month"
+              type="button"
+              :class="{ active: activeCalendarMonth === month }"
+              @click="selectCalendarMonth(month)"
+            >
+              {{ calendarMonthLabel(month) }}
+            </button>
+          </div>
+          <button type="button" class="calendar-nav-button" :disabled="!hasNextCalendarMonth" @click="changeCalendarMonth(1)">
+            下一月
           </button>
         </div>
 
@@ -265,13 +313,6 @@
           v-if="calendarMonthPanels.length > 0"
           ref="calendarScrollerRef"
           class="calendar-carousel"
-          :class="{ dragging: calendarDragState.isDragging }"
-          @pointerdown="startCalendarDrag"
-          @pointermove="moveCalendarDrag"
-          @pointerup="endCalendarDrag"
-          @pointerleave="endCalendarDrag"
-          @pointercancel="endCalendarDrag"
-          @scroll="handleCalendarScroll"
         >
           <section
             v-for="month in calendarMonthPanels"
@@ -320,7 +361,7 @@
       </section>
 
       <section class="content-grid">
-        <div class="results-panel flight-feature-card">
+        <div ref="resultsPanelRef" class="results-panel flight-feature-card">
           <div class="section-head compact">
             <div>
               <p>{{ routeLabel }}</p>
@@ -394,7 +435,7 @@
           </article>
         </div>
 
-        <aside class="order-panel flight-feature-card">
+        <aside ref="orderPanelRef" class="order-panel flight-feature-card">
           <div class="section-head compact">
             <div>
               <p>费用核验</p>
@@ -543,6 +584,19 @@ interface CalendarDay {
   available: boolean;
 }
 
+interface SpecialFareDeal extends CalendarDay {
+  badge: string;
+  savings: number;
+}
+
+interface LowPriceRoutePlan {
+  mode: "oneway" | "roundtrip" | "transfer";
+  date: string;
+  label: string;
+  title: string;
+  summary: string;
+}
+
 interface LowPriceAlert {
   route: string;
   departureCity: string;
@@ -679,6 +733,7 @@ const CityPicker = defineComponent({
 const tripTypes = [
   { label: "单程", value: "oneway" },
   { label: "往返", value: "roundtrip" },
+  { label: "中转", value: "transfer" },
   { label: "多程", value: "multi" },
 ];
 const paymentMethods = [
@@ -751,7 +806,10 @@ const orderStatus = ref<OrderStatus | null>(null);
 const activeLegKey = ref("outbound");
 const calendarStartDate = ref(today);
 const activeCalendarMonth = ref(today.slice(0, 7));
+const specialFareRefreshSeed = ref(0);
 const calendarScrollerRef = ref<HTMLElement | null>(null);
+const resultsPanelRef = ref<HTMLElement | null>(null);
+const orderPanelRef = ref<HTMLElement | null>(null);
 const lowPriceTarget = ref(0);
 const lowPriceAlerts = ref<LowPriceAlert[]>([]);
 const aiQuery = ref("");
@@ -763,13 +821,6 @@ let themeObserver: MutationObserver | null = null;
 // 异步搜索和日历请求都可能被快速切换条件打断，用序号丢弃过期响应。
 let searchRequestSeq = 0;
 let calendarRequestSeq = 0;
-const calendarDragState = reactive({
-  isDragging: false,
-  hasDragged: false,
-  startX: 0,
-  scrollLeft: 0,
-  pointerId: -1,
-});
 
 // 统一把单程、往返、多程转换成航段数组，列表、日历、订单共用这一层抽象。
 const searchLegs = computed<SearchLeg[]>(() => {
@@ -787,6 +838,9 @@ const searchLegs = computed<SearchLeg[]>(() => {
       arrivalCity: segment.arrivalCity,
       departureDate: segment.departureDate,
     }));
+  }
+  if (form.tripType === "transfer") {
+    return [{ key: "outbound", title: "中转", departureCity: form.departureCity, arrivalCity: form.arrivalCity, departureDate: form.departureDate }];
   }
   return [{ key: "outbound", title: "单程", departureCity: form.departureCity, arrivalCity: form.arrivalCity, departureDate: form.departureDate }];
 });
@@ -834,6 +888,62 @@ const calendarSavingsText = computed(() => {
   const savings = calendarAveragePrice.value - Number(lowestCalendarDay.value.lowestPrice);
   return savings > 0 ? `省 ￥${Math.round(savings)}` : "接近均价";
 });
+const lowFareRouteLabel = computed(() => `${cityName(activeLeg.value.departureCity)} → ${cityName(activeLeg.value.arrivalCity)}`);
+const specialFareDeals = computed<SpecialFareDeal[]>(() => {
+  const average = calendarAveragePrice.value;
+  const candidates = availableCalendarDays.value
+    .filter((day) => new Date(`${day.date}T00:00:00`) >= new Date(`${today}T00:00:00`))
+    .map((day) => ({
+      ...day,
+      savings: Math.max(0, Math.round(average - Number(day.lowestPrice))),
+      badge: isLowestCalendarDay(day) ? "当前最低" : calendarDeltaText(day),
+    }))
+    .sort((left, right) => {
+      const priceDiff = Number(left.lowestPrice) - Number(right.lowestPrice);
+      return priceDiff !== 0 ? priceDiff : left.date.localeCompare(right.date);
+    })
+    .slice(0, 24);
+  if (specialFareRefreshSeed.value === 0 || candidates.length <= 6) {
+    return candidates.slice(0, 6);
+  }
+  return candidates
+    .map((deal, index) => ({ deal, score: seededRecommendationScore(`${deal.date}-${index}`, specialFareRefreshSeed.value) }))
+    .sort((left, right) => left.score - right.score)
+    .slice(0, 6)
+    .map((item) => item.deal)
+    .sort((left, right) => {
+      const priceDiff = Number(left.lowestPrice) - Number(right.lowestPrice);
+      return priceDiff !== 0 ? priceDiff : left.date.localeCompare(right.date);
+    });
+});
+const lowPriceRoutePlans = computed<LowPriceRoutePlan[]>(() => {
+  if (specialFareDeals.value.length === 0) return [];
+  const best = specialFareDeals.value[0];
+  const next = specialFareDeals.value[1] || best;
+  return [
+    {
+      mode: "oneway",
+      date: best.date,
+      label: "单程低价",
+      title: `${calendarDayLabel(best.date)} 出发`,
+      summary: `${lowFareRouteLabel.value} ${calendarPriceText(best)} 起，适合立即锁价。`,
+    },
+    {
+      mode: "roundtrip",
+      date: best.date,
+      label: "往返建议",
+      title: `${calendarDayLabel(best.date)} 去 · ${calendarDayLabel(addDays(best.date, 3))} 回`,
+      summary: `去程优先低价日，返程自动规划为 3 天后。`,
+    },
+    {
+      mode: "transfer",
+      date: next.date,
+      label: "中转省钱",
+      title: `${calendarDayLabel(next.date)} 看经停方案`,
+      summary: `放开直飞限制，优先比较经停航班的价格空间。`,
+    },
+  ];
+});
 const selectedCalendarDeltaText = computed(() => calendarDeltaText(selectedCalendarDay.value) || "未在当前日历范围");
 const calendarAdviceTitle = computed(() => {
   if (availableCalendarDays.value.length === 0) return "当前航线暂无可售价格";
@@ -863,7 +973,10 @@ const calendarMonths = computed(() => {
   calendarDays.value.forEach((day) => months.add(day.date.slice(0, 7)));
   return Array.from(months);
 });
-// 月面板补齐月初空白格，让横向拖拽日历保持真实日历的星期对齐。
+const activeCalendarMonthIndex = computed(() => calendarMonths.value.indexOf(activeCalendarMonth.value));
+const hasPreviousCalendarMonth = computed(() => activeCalendarMonthIndex.value > 0);
+const hasNextCalendarMonth = computed(() => activeCalendarMonthIndex.value >= 0 && activeCalendarMonthIndex.value < calendarMonths.value.length - 1);
+// 月面板补齐月初空白格，让按钮翻月时保持真实日历的星期对齐。
 const calendarMonthPanels = computed(() => calendarMonths.value.map((month) => {
   const days = calendarDays.value.filter((day) => day.date.startsWith(month));
   return {
@@ -960,7 +1073,7 @@ async function applyAiSearch() {
     syncPassengers();
     activeLegKey.value = "outbound";
     syncCalendarWindowWithActiveLeg();
-    aiSearchSummary.value = `已解析：${cityName(form.departureCity)} → ${cityName(form.arrivalCity)}，${form.departureDate}，${travelerCount.value} 位乘机人，${cabinLabel(form.cabin)}${form.directOnly ? "，仅直飞" : ""}`;
+    aiSearchSummary.value = `已解析：${cityName(form.departureCity)} → ${cityName(form.arrivalCity)}，${form.departureDate}，${travelerCount.value} 位乘机人，${cabinLabel(form.cabin)}${tripTypeSummaryText.value}`;
     await refreshRouteData();
   } finally {
     aiSearchLoading.value = false;
@@ -983,9 +1096,11 @@ function parseFlightIntent(query: string) {
   if (query.includes("商务舱")) nextForm.cabin = "BUSINESS";
   else if (query.includes("头等舱")) nextForm.cabin = "FIRST";
   else if (query.includes("经济舱")) nextForm.cabin = "ECONOMY";
-  if (query.includes("直飞")) nextForm.directOnly = true;
+  const wantsTransfer = query.includes("中转") || query.includes("经停");
+  if (query.includes("直飞") && !wantsTransfer) nextForm.directOnly = true;
+  if (wantsTransfer) nextForm.directOnly = false;
   if (query.includes("低价") || query.includes("便宜")) nextForm.lowPriceFirst = true;
-  const tripType = returnDate ? "roundtrip" : query.includes("多程") ? "multi" : undefined;
+  const tripType = wantsTransfer ? "transfer" : returnDate ? "roundtrip" : query.includes("多程") ? "multi" : undefined;
   return { form: nextForm, returnDate, tripType };
 }
 
@@ -1048,10 +1163,10 @@ function buildSearchParams(leg: SearchLeg = activeLeg.value) {
     adultCount: form.adultCount,
     childCount: form.childCount,
     cabin: form.cabin || undefined,
-    directOnly: form.directOnly,
+    directOnly: form.tripType === "transfer" ? false : form.directOnly,
     sort: form.lowPriceFirst ? "price" : form.sort,
     page: 1,
-    size: 20,
+    size: form.tripType === "transfer" ? 100 : 20,
   };
 }
 
@@ -1064,7 +1179,8 @@ async function searchFlights(options: { autoSelectFirst?: boolean; resetOrderOnA
     for (const leg of searchLegs.value) {
       const data = await http.get<PageResponse<ProductDTO>>("/flights/search", { params: buildSearchParams(leg) });
       if (requestId !== searchRequestSeq) return;
-      nextResults[leg.key] = { ...data, list: data.list.map(normalizeFlight) };
+      const list = data.list.map(normalizeFlight).filter(matchesTripMode);
+      nextResults[leg.key] = { ...data, total: form.tripType === "transfer" ? list.length : data.total, list };
     }
     if (requestId !== searchRequestSeq) return;
     resultsByLeg.value = nextResults;
@@ -1101,7 +1217,7 @@ async function loadCalendar() {
         startDate,
         days: CALENDAR_RANGE_DAYS,
         cabin: form.cabin || undefined,
-        directOnly: form.directOnly,
+        directOnly: form.tripType === "transfer" ? false : form.directOnly,
         adultCount: form.adultCount,
         childCount: form.childCount,
       },
@@ -1245,14 +1361,59 @@ function normalizeFlight(product: ProductDTO): FlightProduct {
   return { ...product, extraInfo };
 }
 
-function selectCalendarDay(day: CalendarDay) {
-  if (calendarDragState.hasDragged) return;
+function matchesTripMode(flight: FlightProduct) {
+  if (form.tripType !== "transfer") return true;
+  return Number(flight.extraInfo.stops || 0) > 0;
+}
+
+function chooseSpecialFare(deal: CalendarDay) {
+  selectCalendarDay(deal);
+}
+
+function refreshSpecialFares() {
+  if (availableCalendarDays.value.length <= 1) {
+    ElMessage.info("当前低价日期较少，暂无更多推荐");
+    return;
+  }
+  specialFareRefreshSeed.value += 1;
+  ElMessage.success("已为你换一批低价机票");
+}
+
+async function applyLowPricePlan(plan: LowPriceRoutePlan) {
+  form.tripType = plan.mode;
+  if (plan.mode === "transfer") {
+    form.directOnly = false;
+  }
+  if (plan.mode === "roundtrip") {
+    form.returnDate = addDays(plan.date, 3);
+  }
+  activeLegKey.value = "outbound";
+  applyDateToActiveLeg(plan.date);
+  calendarStartDate.value = plan.date;
+  activeCalendarMonth.value = plan.date.slice(0, 7);
+  resetSelection();
+  await refreshRouteData({ keepSelectionReset: false });
+  if (selectedFlight.value) {
+    scrollOrderPanelIntoView();
+  } else {
+    scrollResultsPanelIntoView();
+  }
+}
+
+async function selectCalendarDay(day: CalendarDay) {
   if (!day.available) return;
   applyDateToActiveLeg(day.date);
   calendarStartDate.value = day.date;
   activeCalendarMonth.value = day.date.slice(0, 7);
   resetSelection();
-  refreshRouteData({ keepSelectionReset: false });
+  await refreshRouteData({ keepSelectionReset: false });
+  if (selectedFlight.value) {
+    scrollOrderPanelIntoView();
+    ElMessage.success("已为当天选择可购航班，可继续填写乘机人并下单");
+  } else {
+    scrollResultsPanelIntoView();
+    ElMessage.warning("当天暂无符合条件的可购航班，请调整航线或筛选条件");
+  }
 }
 
 function calendarPriceText(day?: CalendarDay) {
@@ -1301,6 +1462,15 @@ function isTodayCalendarDay(day?: CalendarDay) {
 function isLowestCalendarDay(day?: CalendarDay) {
   if (!day?.available || !lowestCalendarDay.value) return false;
   return day.date === lowestCalendarDay.value.date;
+}
+
+function seededRecommendationScore(value: string, seed: number) {
+  let hash = seed * 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function trendBarHeight(day: CalendarDay) {
@@ -1357,6 +1527,14 @@ function selectCalendarMonth(month: string) {
   scrollCalendarMonthIntoView(month);
 }
 
+function changeCalendarMonth(direction: -1 | 1) {
+  const index = activeCalendarMonthIndex.value;
+  if (index < 0) return;
+  const nextMonth = calendarMonths.value[index + direction];
+  if (!nextMonth) return;
+  selectCalendarMonth(nextMonth);
+}
+
 function chooseLowestCalendarDay() {
   if (!lowestCalendarDay.value) return;
   selectCalendarDay(lowestCalendarDay.value);
@@ -1369,64 +1547,11 @@ function focusSelectedCalendarMonth() {
 
 function scrollCalendarMonthIntoView(month: string, behavior: "auto" | "smooth" = "smooth") {
   nextTick(() => {
-    const panel = calendarScrollerRef.value?.querySelector<HTMLElement>(`[data-calendar-month="${month}"]`);
-    panel?.scrollIntoView({ behavior, block: "nearest", inline: "start" });
+    const scroller = calendarScrollerRef.value;
+    const panel = scroller?.querySelector<HTMLElement>(`[data-calendar-month="${month}"]`);
+    if (!scroller || !panel) return;
+    scroller.scrollTo({ left: panel.offsetLeft, behavior });
   });
-}
-
-function startCalendarDrag(event: PointerEvent) {
-  const scroller = calendarScrollerRef.value;
-  if (!scroller || event.button !== 0) return;
-  calendarDragState.isDragging = true;
-  calendarDragState.hasDragged = false;
-  calendarDragState.startX = event.clientX;
-  calendarDragState.scrollLeft = scroller.scrollLeft;
-  calendarDragState.pointerId = event.pointerId;
-  scroller.setPointerCapture?.(event.pointerId);
-}
-
-// 拖动超过阈值后不触发日期点击，避免用户横向滑动日历时误选日期。
-function moveCalendarDrag(event: PointerEvent) {
-  const scroller = calendarScrollerRef.value;
-  if (!scroller || !calendarDragState.isDragging) return;
-  const deltaX = event.clientX - calendarDragState.startX;
-  if (Math.abs(deltaX) > 4) {
-    calendarDragState.hasDragged = true;
-  }
-  scroller.scrollLeft = calendarDragState.scrollLeft - deltaX;
-  event.preventDefault();
-}
-
-function endCalendarDrag(event: PointerEvent) {
-  const scroller = calendarScrollerRef.value;
-  if (!calendarDragState.isDragging) return;
-  const pointerId = event.pointerId || calendarDragState.pointerId;
-  if (scroller?.hasPointerCapture?.(pointerId)) {
-    scroller.releasePointerCapture(pointerId);
-  }
-  calendarDragState.isDragging = false;
-  handleCalendarScroll();
-  if (calendarDragState.hasDragged) {
-    window.setTimeout(() => {
-      calendarDragState.hasDragged = false;
-    }, 0);
-  }
-}
-
-function handleCalendarScroll() {
-  const scroller = calendarScrollerRef.value;
-  if (!scroller) return;
-  const panels = Array.from(scroller.querySelectorAll<HTMLElement>("[data-calendar-month]"));
-  const current = panels.reduce<HTMLElement | null>((closest, panel) => {
-    if (!closest) return panel;
-    const closestDistance = Math.abs(closest.offsetLeft - scroller.scrollLeft);
-    const panelDistance = Math.abs(panel.offsetLeft - scroller.scrollLeft);
-    return panelDistance < closestDistance ? panel : closest;
-  }, null);
-  const month = current?.dataset.calendarMonth;
-  if (month && activeCalendarMonth.value !== month) {
-    activeCalendarMonth.value = month;
-  }
 }
 
 function changeCalendarStartDate() {
@@ -1586,6 +1711,9 @@ function passengerType(index: number) {
 }
 
 function handleTripTypeChange() {
+  if (form.tripType === "transfer") {
+    form.directOnly = false;
+  }
   if (form.tripType === "multi") {
     multiSegments.value = [
       { id: 1, departureCity: form.departureCity, arrivalCity: form.arrivalCity, departureDate: form.departureDate },
@@ -1705,12 +1833,23 @@ function swapCities() {
   refreshRouteData();
 }
 
-function refreshRouteData(options: { keepSelectionReset?: boolean } = {}) {
+async function refreshRouteData(options: { keepSelectionReset?: boolean } = {}) {
   if (options.keepSelectionReset !== false) {
     resetSelection();
   }
-  searchFlights();
-  loadCalendar();
+  await Promise.all([searchFlights(), loadCalendar()]);
+}
+
+function scrollOrderPanelIntoView() {
+  nextTick(() => {
+    orderPanelRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function scrollResultsPanelIntoView() {
+  nextTick(() => {
+    resultsPanelRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function resetSelection() {
@@ -2445,6 +2584,7 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
   font-weight: 700;
 }
 
+.special-fares,
 .calendar-strip,
 .content-grid {
   margin-top: 18px;
@@ -2457,6 +2597,134 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
 
 .calendar-strip {
   padding: 18px;
+}
+
+.special-fares {
+  padding: 18px;
+}
+
+.special-fare-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.special-fare-actions span {
+  color: var(--flight-muted);
+  font-weight: 700;
+}
+
+.special-fare-actions button {
+  background: var(--flight-card-strong);
+  border: 1px solid var(--flight-border);
+  border-radius: 6px;
+  color: var(--flight-text);
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 32px;
+  padding: 7px 12px;
+  transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.special-fare-actions button:hover:not(:disabled) {
+  border-color: var(--flight-primary);
+  color: var(--flight-primary);
+  transform: translateY(-1px);
+}
+
+.special-fare-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.special-fare-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.special-fare-card,
+.low-route-plans button {
+  background: var(--flight-card-strong);
+  border: 1px solid var(--flight-border);
+  border-radius: 8px;
+  color: var(--flight-text);
+  min-width: 0;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.special-fare-card {
+  display: grid;
+  gap: 7px;
+  min-height: 112px;
+  padding: 14px;
+}
+
+.special-fare-card:hover,
+.low-route-plans button:hover {
+  border-color: var(--flight-primary);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--flight-primary) 13%, transparent);
+  transform: translateY(-1px);
+}
+
+.special-fare-card span,
+.low-route-plans span {
+  color: var(--flight-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.special-fare-card strong {
+  color: var(--flight-primary);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.special-fare-card small,
+.low-route-plans small {
+  color: var(--flight-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.low-route-plans {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.low-route-plans button {
+  display: grid;
+  gap: 7px;
+  min-height: 104px;
+  padding: 14px;
+}
+
+.low-route-plans strong {
+  color: var(--flight-text);
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.flight-page.is-dark-mode .special-fare-card,
+.flight-page.is-dark-mode .low-route-plans button,
+.flight-page.is-dark-mode .special-fare-actions button,
+:global([data-theme="dark"]) .flight-page .special-fare-card,
+:global([data-theme="dark"]) .flight-page .low-route-plans button,
+:global([data-theme="dark"]) .flight-page .special-fare-actions button,
+:global(.dark) .flight-page .special-fare-card,
+:global(.dark) .flight-page .low-route-plans button,
+:global(.dark) .flight-page .special-fare-actions button {
+  background: #050505;
+  border-color: var(--border-light);
 }
 
 .section-head p {
@@ -2707,12 +2975,42 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
   writing-mode: vertical-rl;
 }
 
-.calendar-months {
+.calendar-month-navigator {
+  align-items: center;
   display: flex;
   gap: 8px;
   margin-top: 14px;
+}
+
+.calendar-months {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
   overflow-x: auto;
   padding-bottom: 2px;
+}
+
+.calendar-nav-button {
+  background: var(--flight-card-strong);
+  border: 1px solid var(--flight-border);
+  border-radius: 6px;
+  color: var(--flight-text);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.calendar-nav-button:hover:not(:disabled) {
+  border-color: var(--flight-primary);
+  color: var(--flight-primary);
+}
+
+.calendar-nav-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .calendar-months button {
@@ -2733,7 +3031,6 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
 }
 
 .calendar-carousel {
-  cursor: grab;
   display: flex;
   gap: 14px;
   margin-top: 14px;
@@ -2743,17 +3040,6 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
   scroll-snap-type: x mandatory;
   scrollbar-color: var(--flight-border) transparent;
   scrollbar-width: thin;
-  touch-action: pan-y;
-}
-
-.calendar-carousel.dragging {
-  cursor: grabbing;
-  scroll-snap-type: none;
-  user-select: none;
-}
-
-.calendar-carousel.dragging .calendar-grid button {
-  pointer-events: none;
 }
 
 .calendar-month-panel {
@@ -4079,6 +4365,10 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .special-fare-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .m3-workflow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4221,6 +4511,8 @@ function airportLabel(flight: FlightProduct, direction: "departure" | "arrival")
   }
 
   .route-metrics,
+  .special-fare-grid,
+  .low-route-plans,
   .m3-workflow,
   .calendar-summary,
   .order-actions {
