@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 import top.ortus.timemark.backend.JwtTokenService;
 import top.ortus.timemark.backend.common.ApiResponse;
 import top.ortus.timemark.backend.common.PageResponse;
@@ -25,6 +27,8 @@ import top.ortus.timemark.backend.security.UserIdentity;
 import top.ortus.timemark.backend.service.FlightSearchService;
 import top.ortus.timemark.backend.service.CommunityService;
 import top.ortus.timemark.backend.service.ItineraryService;
+import top.ortus.timemark.backend.service.ObjectStorageService;
+import top.ortus.timemark.backend.utils.UserIdFormatter;
 
 import java.util.List;
 import java.util.Map;
@@ -37,15 +41,18 @@ public class PublicApiController {
     private final JwtTokenService jwtTokenService;
     private final ItineraryService itineraryService;
     private final CommunityService communityService;
+    private final ObjectStorageService objectStorageService;
 
     public PublicApiController(FlightSearchService flightSearchService,
                                JwtTokenService jwtTokenService,
                                ItineraryService itineraryService,
-                               CommunityService communityService) {
+                               CommunityService communityService,
+                               ObjectStorageService objectStorageService) {
         this.flightSearchService = flightSearchService;
         this.jwtTokenService = jwtTokenService;
         this.itineraryService = itineraryService;
         this.communityService = communityService;
+        this.objectStorageService = objectStorageService;
     }
 
     @GetMapping("/products")
@@ -280,7 +287,19 @@ public class PublicApiController {
     public ApiResponse<QuestionDTO> answerQuestion(@RequestHeader(value = "Authorization", required = false) String authorization,
                                                    @PathVariable Long id,
                                                    @RequestBody Map<String, Object> payload) {
-        return ApiResponse.ok(communityService.answerQuestion(resolveUserId(authorization), id, payload));
+        return ApiResponse.ok(communityService.answerQuestion(resolveUserId(authorization), resolveAdmin(authorization), id, payload));
+    }
+
+    @DeleteMapping("/questions/{id}")
+    public ApiResponse<Boolean> deleteQuestion(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                               @PathVariable Long id) {
+        return ApiResponse.ok(communityService.deleteQuestion(resolveUserId(authorization), resolveAdmin(authorization), id));
+    }
+
+    @DeleteMapping("/questions/{id}/answer")
+    public ApiResponse<Boolean> deleteAnswer(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                             @PathVariable Long id) {
+        return ApiResponse.ok(communityService.deleteAnswer(resolveUserId(authorization), resolveAdmin(authorization), id));
     }
 
     @GetMapping("/reviews/orders/{orderNo}")
@@ -313,9 +332,12 @@ public class PublicApiController {
         return ApiResponse.ok(Map.of("city", city, "weather", "unknown"));
     }
 
-    @PostMapping("/upload/image")
-    public ApiResponse<Map<String, Object>> uploadImage(@RequestParam(required = false) String fileName) {
-        return ApiResponse.ok(Map.of("url", "/uploads/" + (fileName == null ? "image" : fileName)));
+    @PostMapping(value = "/upload/image", consumes = "multipart/form-data")
+    public ApiResponse<Map<String, Object>> uploadImage(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                        @RequestPart("file") MultipartFile file) {
+        Long userId = resolveUserId(authorization);
+        String url = objectStorageService.uploadPostImage(UserIdFormatter.format16(String.valueOf(userId)), file);
+        return ApiResponse.ok(Map.of("url", url));
     }
 
     private <T> PageResponse<T> emptyPage() {

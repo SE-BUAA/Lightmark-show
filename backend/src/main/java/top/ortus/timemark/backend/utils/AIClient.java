@@ -24,21 +24,21 @@ public class AIClient {
     private final String model;
 
     public AIClient(RestTemplateBuilder restTemplateBuilder,
-                    @Value("${AI_API_URL:}") String apiUrl,
-                    @Value("${AI_API_KEY:}") String apiKey,
-                    @Value("${AI_MODEL:deepseek-chat}") String model) {
+                    @Value("${timemark.ai.api-url:https://api.deepseek.com/chat/completions}") String apiUrl,
+                    @Value("${timemark.ai.api-key:}") String apiKey,
+                    @Value("${DEEPSEEK_API_KEY:}") String deepSeekApiKey,
+                    @Value("${timemark.ai.model:deepseek-v4-flash}") String model) {
         this.restTemplate = restTemplateBuilder
                 .connectTimeout(Duration.ofSeconds(10))
                 .readTimeout(Duration.ofSeconds(45))
                 .build();
         this.apiUrl = apiUrl;
-        this.apiKey = apiKey;
+        this.apiKey = StringUtils.hasText(apiKey) ? apiKey : deepSeekApiKey;
         this.model = model;
     }
 
     public Optional<String> chat(String prompt) {
         if (!StringUtils.hasText(apiUrl) || !StringUtils.hasText(apiKey)) {
-            // TODO Configure AI_API_URL and AI_API_KEY to replace this mock fallback with a real model call.
             log.info("AI config missing, skip external model call");
             return Optional.empty();
         }
@@ -49,7 +49,7 @@ public class AIClient {
             Map<String, Object> body = Map.of(
                     "model", model,
                     "messages", new Object[]{
-                            Map.of("role", "system", "content", "你是拾光旅行的 AI 助手。请严格按照用户要求输出。"),
+                            Map.of("role", "system", "content", "你是拾光旅行的 AI 助手。请严格按照用户要求输出，涉及结构化结果时必须返回可解析 JSON。"),
                             Map.of("role", "user", "content", prompt)
                     },
                     "temperature", 0.7

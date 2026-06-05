@@ -35,7 +35,7 @@ const request: AxiosInstance = axios.create({
   // 使用环境变量中的API基础URL，如果未设置则使用默认值
   baseURL: process.env.VUE_APP_API_BASE_URL || "/api",
   // 请求超时时间，单位毫秒
-  timeout: 15000,
+  timeout: 30000,
 });
 
 // 请求拦截器：在发送请求前自动添加认证令牌
