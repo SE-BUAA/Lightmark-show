@@ -138,7 +138,7 @@
             @click="selectCalendarDate(day.date)"
           >
             <span>{{ day.dayNumber }}</span>
-            <strong>{{ day.ticketCount > 0 ? `${day.ticketCount}张` : '无票' }}</strong>
+            <strong>{{ day.ticketCount > 0 ? '有票' : '无票' }}</strong>
             <small>{{ day.trainCount > 0 ? `${day.trainCount}趟` : '暂无车次' }}</small>
           </button>
         </div>
@@ -153,7 +153,7 @@
         <el-button v-if="searchForm.date" text type="primary" @click="clearSelectedDate">查看全部日期</el-button>
       </div>
 
-      <el-table v-if="trainStore.trainsList.length" v-loading="searchLoading" :data="trainStore.trainsList" stripe class="train-table">
+      <el-table v-if="trainStore.trainsList.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
         <el-table-column prop="name" label="车次" min-width="110" />
         <el-table-column label="出发/到达" min-width="180">
           <template #default="{ row }">
@@ -183,6 +183,15 @@
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="trainStore.trainsList.length > pageSize" class="pagination-bar">
+        <el-pagination
+          v-model:current-page="currentPage"
+          :page-size="pageSize"
+          :total="trainStore.trainsList.length"
+          background
+          layout="prev, pager, next, jumper, total"
+        />
+      </div>
       <el-empty v-else-if="hasSearched && !searchLoading" description="未找到符合条件的车次" />
       <el-empty v-else description="正在加载可用车次" />
     </section>
@@ -313,6 +322,8 @@ const pollTimer = ref<number>()
 const autoSearchTimer = ref<number>()
 const calendarStats = ref<Record<string, { ticketCount: number; trainCount: number }>>({})
 const calendarMonthPicker = ref(toMonthValue(new Date()))
+const currentPage = ref(1)
+const pageSize = 10
 
 const options = reactive<TrainOptions>({
   startStations: [],
@@ -398,6 +409,11 @@ const countdownText = computed(() => {
   return `${minutes}:${seconds}`
 })
 
+const pagedTrains = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return trainStore.trainsList.slice(start, start + pageSize)
+})
+
 const errorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
 }
@@ -440,6 +456,7 @@ const refreshTrainData = async () => {
       seatTypes: searchForm.seatTypes
     })
     trainStore.setTrainsList(trains)
+    currentPage.value = 1
     hasSearched.value = true
   } catch (error: unknown) {
     ElMessage.error(errorMessage(error, '查询失败，请稍后重试'))
@@ -480,12 +497,14 @@ const scheduleRefresh = () => {
 const selectCalendarDate = (date: string) => {
   searchForm.date = searchForm.date === date ? '' : date
   trainStore.setSearchParams({ ...searchForm })
+  currentPage.value = 1
   refreshTrainData()
 }
 
 const clearSelectedDate = () => {
   searchForm.date = ''
   trainStore.setSearchParams({ ...searchForm })
+  currentPage.value = 1
   refreshTrainData()
 }
 
@@ -925,6 +944,12 @@ onUnmounted(clearTimers)
 
 .train-table {
   width: 100%;
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 0 0;
 }
 
 .tag {
