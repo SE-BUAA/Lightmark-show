@@ -8,12 +8,27 @@ export interface TrainProduct {
   soldCount: number
   categoryTags?: string[]
   extra?: Record<string, unknown>
+  seats?: Record<string, number>
+  prices?: Record<string, number>
+}
+
+export interface TrainSegment {
+  id?: string
+  name: string
+  train_no?: string
+  train_type?: string
+  price?: number
+  stock?: number
+  extra?: Record<string, unknown>
+  seats?: Record<string, number>
+  prices?: Record<string, number>
 }
 
 export interface TrainSearchPayload {
   startStation?: string
   endStation?: string
   date?: string
+  month?: string
   trainTypes: string[]
   seatTypes: string[]
 }
@@ -44,6 +59,7 @@ export interface TrainOrderPayload {
   passengerPhone: string
   passengerAge: number
   seatType: string
+  transferSeatTypes?: string[]
   isStudent: boolean
 }
 
@@ -99,6 +115,10 @@ export function getTrainOptions() {
 
 export function searchTrains(data: TrainSearchPayload) {
   return http.post<TrainProduct[]>('/trains/search', data)
+}
+
+export function searchTrainTransfers(data: TrainSearchPayload) {
+  return http.post<TrainProduct[]>('/trains/transfer/search', data)
 }
 
 export function getTrainCalendar(data: TrainCalendarPayload) {

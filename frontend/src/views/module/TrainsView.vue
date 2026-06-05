@@ -73,12 +73,17 @@
         <template #header>
           <div class="card-header">
             <div>
-              <span>筛选条件</span>
+              <span>{{ activeMode === 'direct' ? '直达筛选' : '中转筛选' }}</span>
               <strong>{{ routeSummary }}</strong>
             </div>
             <el-button text type="primary" :loading="searchLoading" @click="refreshTrainData">刷新</el-button>
           </div>
         </template>
+
+        <el-tabs v-model="activeMode" class="mode-tabs">
+          <el-tab-pane label="直达" name="direct" />
+          <el-tab-pane label="中转" name="transfer" />
+        </el-tabs>
 
         <el-form :model="searchForm" label-position="top" class="filter-form">
           <el-form-item label="出发站">
@@ -104,42 +109,32 @@
         </el-form>
       </el-card>
 
-      <el-card class="calendar-card" shadow="never">
+      <el-card class="date-card" shadow="never">
         <template #header>
           <div class="card-header">
             <div>
-              <span>日期月历</span>
-              <strong>{{ calendarMonthTitle }}</strong>
+              <span>出发日期</span>
+              <strong>{{ searchForm.date }}</strong>
             </div>
-            <div class="calendar-actions">
-              <el-button text type="primary" @click="shiftMonth(-1)">上月</el-button>
-              <el-date-picker
-                v-model="calendarMonthPicker"
-                type="month"
-                value-format="YYYY-MM"
-                :clearable="false"
-                @change="handleMonthChange"
-              />
-              <el-button text type="primary" @click="shiftMonth(1)">下月</el-button>
+            <div class="date-actions">
+              <el-button text type="primary" @click="shiftDateWindow(-7)">前7天</el-button>
+              <el-button text type="primary" @click="resetDateWindow">今天</el-button>
+              <el-button text type="primary" @click="shiftDateWindow(7)">后7天</el-button>
             </div>
           </div>
         </template>
 
-        <div class="calendar-weekdays">
-          <span v-for="weekday in calendarWeekdays" :key="weekday">{{ weekday }}</span>
-        </div>
-        <div class="calendar-grid">
-          <span v-for="blank in calendarLeadingBlanks" :key="`blank-${blank}`" class="calendar-blank"></span>
+        <div class="date-strip">
           <button
-            v-for="day in calendarDays"
+            v-for="day in dateCandidates"
             :key="day.date"
             type="button"
-            :class="{ active: searchForm.date === day.date, today: day.isToday, disabled: day.ticketCount <= 0 }"
-            @click="selectCalendarDate(day.date)"
+            :class="{ active: searchForm.date === day.date, today: day.isToday }"
+            @click="selectDate(day.date)"
           >
-            <span>{{ day.dayNumber }}</span>
-            <strong>{{ day.ticketCount > 0 ? '有票' : '无票' }}</strong>
-            <small>{{ day.trainCount > 0 ? `${day.trainCount}趟` : '暂无车次' }}</small>
+            <span>{{ day.weekday }}</span>
+            <strong>{{ day.label }}</strong>
+            <small>{{ day.date }}</small>
           </button>
         </div>
       </el-card>
@@ -147,39 +142,57 @@
       <div class="result-toolbar">
         <div>
           <strong>{{ trainStore.trainsList.length }}</strong>
-          <span>趟可选车次</span>
+          <span>{{ activeMode === 'direct' ? '趟可选车次' : '个中转方案' }}</span>
           <el-tag v-if="searchForm.date" effect="plain">{{ searchForm.date }}</el-tag>
         </div>
-        <el-button v-if="searchForm.date" text type="primary" @click="clearSelectedDate">查看全部日期</el-button>
       </div>
 
       <el-table v-if="trainStore.trainsList.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
-        <el-table-column prop="name" label="车次" min-width="110" />
-        <el-table-column label="出发/到达" min-width="180">
+        <el-table-column v-if="activeMode === 'direct'" prop="name" label="车次" min-width="110" />
+        <el-table-column v-else label="中转车次" min-width="320">
           <template #default="{ row }">
-            {{ row.extra?.start_station }} - {{ row.extra?.end_station }}
+            <div class="transfer-box">
+              <div v-for="(segment, index) in transferSegments(row)" :key="`${segmentTrainNo(segment)}-${index}`" class="transfer-line">
+                <span class="segment-index">第{{ index + 1 }}程</span>
+                <strong>{{ segmentTrainNo(segment) }}</strong>
+                <el-tag size="small" effect="plain">{{ segmentTrainType(segment) }}</el-tag>
+                <span>{{ segment.extra?.start_station }} - {{ segment.extra?.end_station }}</span>
+                <small>{{ segment.extra?.depart_time || '--:--' }} - {{ segment.extra?.arrive_time || '--:--' }}</small>
+                <span class="segment-seats">{{ availableSeatNames(segment).join('、') || '无座位信息' }}</span>
+              </div>
+            </div>
           </template>
-        </el-table-column>
-        <el-table-column label="日期" min-width="120">
-          <template #default="{ row }">{{ row.extra?.date }}</template>
         </el-table-column>
         <el-table-column label="时间" min-width="140">
           <template #default="{ row }">{{ row.extra?.depart_time || '--:--' }} - {{ row.extra?.arrive_time || '--:--' }}</template>
         </el-table-column>
-        <el-table-column label="类型/座位" min-width="260">
+        <el-table-column v-if="activeMode === 'transfer'" label="换乘" min-width="130">
           <template #default="{ row }">
-            <el-tag v-for="tag in row.categoryTags" :key="tag" class="tag" size="small">{{ tag }}</el-tag>
+            <div class="transfer-meta">
+              <strong>{{ row.extra?.middle_station || '-' }}</strong>
+              <span>等待 {{ row.extra?.wait_time || '-' }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" min-width="90">
+          <template #default="{ row }">{{ row.extra?.train_type }}</template>
+        </el-table-column>
+        <el-table-column label="可选座位" min-width="260">
+          <template #default="{ row }">
+            <el-tag v-for="seat in availableSeatNames(row)" :key="seat" class="tag" size="small">{{ seat }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="价格" min-width="100">
-          <template #default="{ row }">¥{{ row.price }}</template>
+          <template #default="{ row }">{{ formatTrainPrices(row) }}</template>
         </el-table-column>
         <el-table-column label="余票" min-width="80">
           <template #default="{ row }">{{ availableTickets(row) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" :disabled="availableTickets(row) <= 0" @click="openOrderDialog(row)">选择</el-button>
+            <el-button type="primary" :disabled="availableTickets(row) <= 0" @click="openOrderDialog(row)">
+              {{ activeMode === 'direct' ? '购买' : '购买两段' }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -192,7 +205,7 @@
           layout="prev, pager, next, jumper, total"
         />
       </div>
-      <el-empty v-else-if="hasSearched && !searchLoading" description="未找到符合条件的车次" />
+      <el-empty v-else-if="hasSearched && !searchLoading" :description="activeMode === 'direct' ? '未找到符合条件的车次' : '未找到符合条件的中转方案'" />
       <el-empty v-else description="正在加载可用车次" />
     </section>
 
@@ -222,11 +235,33 @@
         <el-form-item label="学生票">
           <el-checkbox v-model="orderForm.isStudent">我是学生</el-checkbox>
         </el-form-item>
-        <el-form-item label="座位类型" prop="seatType">
+        <el-form-item v-if="!isSelectedTransfer" label="座位类型" prop="seatType">
           <el-select v-model="orderForm.seatType" placeholder="请选择座位类型">
-            <el-option v-for="seat in currentSeatOptions" :key="seat" :label="seat" :value="seat" />
+            <el-option
+              v-for="seat in currentSeatOptions"
+              :key="seat"
+              :label="`${seat}（余票 ${selectedTrainSeatCount(seat)} 张）`"
+              :value="seat"
+            />
           </el-select>
         </el-form-item>
+        <template v-else>
+          <el-form-item
+            v-for="(segment, index) in selectedTransferSegments"
+            :key="`${segmentTrainNo(segment)}-${index}`"
+            :label="`第${index + 1}程座位`"
+            :prop="index === 0 ? 'firstTransferSeatType' : 'secondTransferSeatType'"
+          >
+            <el-select v-model="orderForm.transferSeatTypes[index]" placeholder="请选择座位类型">
+              <el-option
+                v-for="seat in availableSeatNames(segment)"
+                :key="seat"
+                :label="`${segmentTrainNo(segment)} · ${seat}（余票 ${segmentSeatCount(segment, seat)} 张）`"
+                :value="seat"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="showOrderDialog = false">取消</el-button>
@@ -270,30 +305,29 @@ import {
   cancelOrder,
   changeTrainOrder,
   createTrainOrder,
-  getTrainCalendar,
   getOrder,
   getTrainOptions,
   payOrder,
   previewTrainChange,
   refundTrainOrder,
   refundTrainOrderByPickupCode,
+  searchTrainTransfers,
   searchTrains
 } from '@/api/train'
-import type { TrainChangePreviewResponse, TrainChangeResponse, TrainOptions, TrainProduct } from '@/api/train'
+import type { TrainChangePreviewResponse, TrainChangeResponse, TrainOptions, TrainProduct, TrainSegment } from '@/api/train'
 import { useTrainStore } from '@/stores/train'
 
-interface CalendarDay {
+interface DateCandidate {
   date: string
-  dayNumber: number
-  ticketCount: number
-  trainCount: number
+  label: string
+  weekday: string
   isToday: boolean
 }
 
 const trainStore = useTrainStore()
 const trainTypeOptions = ['高铁', '动车', '普速']
 const seatTypeOptions = ['商务座', '一等座', '二等座', '硬卧', '软卧', '硬座']
-const calendarWeekdays = ['一', '二', '三', '四', '五', '六', '日']
+const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const showOrderDialog = ref(false)
 const showPayDialog = ref(false)
@@ -320,10 +354,10 @@ const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
 const autoSearchTimer = ref<number>()
-const calendarStats = ref<Record<string, { ticketCount: number; trainCount: number }>>({})
-const calendarMonthPicker = ref(toMonthValue(new Date()))
+const dateWindowStart = ref(new Date())
 const currentPage = ref(1)
 const pageSize = 10
+const activeMode = ref<'direct' | 'transfer'>('direct')
 
 const options = reactive<TrainOptions>({
   startStations: [],
@@ -334,7 +368,7 @@ const options = reactive<TrainOptions>({
 const searchForm = reactive({
   startStation: trainStore.searchParams.startStation || '',
   endStation: trainStore.searchParams.endStation || '',
-  date: trainStore.searchParams.date || '',
+  date: trainStore.searchParams.date || formatDate(new Date()),
   trainTypes: [...(trainStore.searchParams.trainTypes || [])],
   seatTypes: [...(trainStore.searchParams.seatTypes || [])]
 })
@@ -345,6 +379,7 @@ const orderForm = reactive({
   passengerPhone: '',
   passengerAge: 25,
   seatType: '',
+  transferSeatTypes: ['', ''],
   isStudent: false
 })
 
@@ -358,7 +393,25 @@ const orderRules: FormRules = {
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的中国大陆手机号', trigger: 'blur' }
   ],
   passengerAge: [{ required: true, type: 'number', message: '年龄必须为1-120之间的正整数', trigger: 'change' }],
-  seatType: [{ required: true, message: '请选择座位类型', trigger: 'change' }]
+  seatType: [{ required: true, message: '请选择座位类型', trigger: 'change' }],
+  firstTransferSeatType: [
+    {
+      validator: (_rule, _value, callback) => {
+        if (isSelectedTransfer.value && !orderForm.transferSeatTypes[0]) callback(new Error('请选择第一程座位类型'))
+        else callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  secondTransferSeatType: [
+    {
+      validator: (_rule, _value, callback) => {
+        if (isSelectedTransfer.value && !orderForm.transferSeatTypes[1]) callback(new Error('请选择第二程座位类型'))
+        else callback()
+      },
+      trigger: 'change'
+    }
+  ]
 }
 
 const routeSummary = computed(() => {
@@ -367,37 +420,26 @@ const routeSummary = computed(() => {
   return `${start} - ${end}`
 })
 
-const calendarMonthTitle = computed(() => {
-  const [year, month] = calendarMonthPicker.value.split('-')
-  return `${year}年${Number(month)}月`
-})
-
 const currentSeatOptions = computed(() => {
-  const tags = trainStore.selectedTrain?.categoryTags || []
-  return tags.filter((tag) => seatTypeOptions.includes(tag))
+  return trainStore.selectedTrain ? availableSeatNames(trainStore.selectedTrain) : []
 })
 
-const calendarLeadingBlanks = computed(() => {
-  const [year, month] = calendarMonthPicker.value.split('-').map(Number)
-  const firstDay = new Date(year, month - 1, 1).getDay()
-  return (firstDay + 6) % 7
+const selectedTransferSegments = computed(() => {
+  return trainStore.selectedTrain ? transferSegments(trainStore.selectedTrain).slice(0, 2) : []
 })
 
-const calendarDays = computed<CalendarDay[]>(() => {
-  const [year, month] = calendarMonthPicker.value.split('-').map(Number)
-  const daysInMonth = new Date(year, month, 0).getDate()
+const isSelectedTransfer = computed(() => selectedTransferSegments.value.length >= 2)
+
+const dateCandidates = computed<DateCandidate[]>(() => {
   const today = formatDate(new Date())
-  const counts = new Map<string, { ticketCount: number; trainCount: number }>()
-
-  return Array.from({ length: daysInMonth }, (_, index) => {
-    const dayNumber = index + 1
-    const date = `${calendarMonthPicker.value}-${String(dayNumber).padStart(2, '0')}`
-    const count = calendarStats.value[date] || counts.get(date) || { ticketCount: 0, trainCount: 0 }
+  return Array.from({ length: 14 }, (_, index) => {
+    const current = new Date(dateWindowStart.value)
+    current.setDate(dateWindowStart.value.getDate() + index)
+    const date = formatDate(current)
     return {
       date,
-      dayNumber,
-      ticketCount: count.ticketCount,
-      trainCount: count.trainCount,
+      label: `${current.getMonth() + 1}/${current.getDate()}`,
+      weekday: date === today ? '今天' : weekdayLabels[current.getDay()],
       isToday: date === today
     }
   })
@@ -422,15 +464,67 @@ const availableTickets = (train: TrainProduct) => {
   return Math.max(0, Number(train.stock || 0) - Number(train.soldCount || 0))
 }
 
+const availableSeatNames = (train: TrainProduct) => {
+  const seats = train.seats || {}
+  return Object.keys(seats)
+}
+
+const transferSegments = (train: TrainProduct): TrainSegment[] => {
+  const segments = train.extra?.segments
+  return Array.isArray(segments) ? (segments as TrainSegment[]) : []
+}
+
+const firstText = (...values: unknown[]) => {
+  for (const value of values) {
+    const text = value == null ? '' : String(value).trim()
+    if (text) return text
+  }
+  return ''
+}
+
+const segmentTrainNo = (segment: TrainSegment) => {
+  return firstText(segment.train_no, segment.extra?.train_no, segment.name, '未知车次')
+}
+
+const segmentTrainType = (segment: TrainSegment) => {
+  const trainNo = segmentTrainNo(segment)
+  if (trainNo && trainNo !== '未知车次') {
+    const first = trainNo.charAt(0).toUpperCase()
+    if (first === 'G') return '高铁'
+    if (first === 'D') return '动车'
+    return '普速'
+  }
+  return firstText(segment.train_type, segment.extra?.train_type, '-')
+}
+
+const formatTrainPrices = (train: TrainProduct) => {
+  const prices = train.prices || {}
+  const displayPrices = availableSeatNames(train)
+    .map((seat) => prices[seat])
+    .filter((price): price is number => typeof price === 'number' && price > 0)
+  if (!displayPrices.length) {
+    return train.price ? `¥${train.price}` : '¥0'
+  }
+  const min = Math.min(...displayPrices)
+  const max = Math.max(...displayPrices)
+  return min === max ? `¥${min}` : `¥${min} - ¥${max}`
+}
+
+const selectedTrainSeatCount = (seat: string) => {
+  return Number(trainStore.selectedTrain?.seats?.[seat] || 0)
+}
+
+const segmentSeatCount = (segment: TrainSegment, seat: string) => {
+  return Number(segment.seats?.[seat] || 0)
+}
+
+const hasRouteSelected = () => Boolean(searchForm.startStation && searchForm.endStation)
+
 function formatDate(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function toMonthValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 const loadOptions = async () => {
@@ -445,16 +539,24 @@ const loadOptions = async () => {
 }
 
 const refreshTrainData = async () => {
+  if (!hasRouteSelected()) {
+    trainStore.setSearchParams({ ...searchForm })
+    trainStore.setTrainsList([])
+    currentPage.value = 1
+    hasSearched.value = false
+    return
+  }
   searchLoading.value = true
   try {
     trainStore.setSearchParams({ ...searchForm })
-    const trains = await searchTrains({
+    const payload = {
       startStation: searchForm.startStation,
       endStation: searchForm.endStation,
       date: searchForm.date,
       trainTypes: searchForm.trainTypes,
       seatTypes: searchForm.seatTypes
-    })
+    }
+    const trains = activeMode.value === 'transfer' ? await searchTrainTransfers(payload) : await searchTrains(payload)
     trainStore.setTrainsList(trains)
     currentPage.value = 1
     hasSearched.value = true
@@ -465,59 +567,39 @@ const refreshTrainData = async () => {
   }
 }
 
-const refreshCalendarData = async () => {
-  try {
-    const days = await getTrainCalendar({
-      startStation: searchForm.startStation,
-      endStation: searchForm.endStation,
-      month: calendarMonthPicker.value,
-      trainTypes: searchForm.trainTypes,
-      seatTypes: searchForm.seatTypes
-    })
-    calendarStats.value = days.reduce<Record<string, { ticketCount: number; trainCount: number }>>((map, day) => {
-      map[day.date] = {
-        ticketCount: Number(day.ticketCount || 0),
-        trainCount: Number(day.trainCount || 0)
-      }
-      return map
-    }, {})
-  } catch (error: unknown) {
-    ElMessage.error(errorMessage(error, '月历加载失败，请稍后重试'))
-  }
-}
-
 const scheduleRefresh = () => {
   if (autoSearchTimer.value) window.clearTimeout(autoSearchTimer.value)
   autoSearchTimer.value = window.setTimeout(async () => {
-    await refreshCalendarData()
+    if (!hasRouteSelected()) {
+      trainStore.setTrainsList([])
+      currentPage.value = 1
+      hasSearched.value = false
+      return
+    }
     await refreshTrainData()
   }, 250)
 }
 
-const selectCalendarDate = (date: string) => {
-  searchForm.date = searchForm.date === date ? '' : date
+const selectDate = (date: string) => {
+  searchForm.date = date
   trainStore.setSearchParams({ ...searchForm })
   currentPage.value = 1
   refreshTrainData()
 }
 
-const clearSelectedDate = () => {
-  searchForm.date = ''
-  trainStore.setSearchParams({ ...searchForm })
-  currentPage.value = 1
+const shiftDateWindow = (offset: number) => {
+  const next = new Date(dateWindowStart.value)
+  next.setDate(dateWindowStart.value.getDate() + offset)
+  dateWindowStart.value = next
+  searchForm.date = formatDate(next)
   refreshTrainData()
 }
 
-const handleMonthChange = async () => {
-  if (!calendarMonthPicker.value) calendarMonthPicker.value = toMonthValue(new Date())
-  await refreshCalendarData()
-}
-
-const shiftMonth = async (offset: number) => {
-  const [year, month] = calendarMonthPicker.value.split('-').map(Number)
-  const next = new Date(year, month - 1 + offset, 1)
-  calendarMonthPicker.value = toMonthValue(next)
-  await refreshCalendarData()
+const resetDateWindow = () => {
+  const today = new Date()
+  dateWindowStart.value = today
+  searchForm.date = formatDate(today)
+  refreshTrainData()
 }
 
 const openRefundDialog = () => {
@@ -600,6 +682,11 @@ const openOrderDialog = (train: TrainProduct) => {
   orderForm.passengerPhone = ''
   orderForm.passengerAge = 25
   orderForm.seatType = currentSeatOptions.value[0] || ''
+  const segments = transferSegments(train)
+  orderForm.transferSeatTypes = [
+    segments[0] ? availableSeatNames(segments[0])[0] || '' : '',
+    segments[1] ? availableSeatNames(segments[1])[0] || '' : ''
+  ]
   orderForm.isStudent = false
   orderFormRef.value?.clearValidate()
   showOrderDialog.value = true
@@ -613,7 +700,12 @@ const handleSubmitOrder = async () => {
   try {
     const order = await createTrainOrder({
       productId: trainStore.selectedTrain.id,
-      ...orderForm
+      passengerName: orderForm.passengerName,
+      passengerPhone: orderForm.passengerPhone,
+      passengerAge: orderForm.passengerAge,
+      seatType: isSelectedTransfer.value ? orderForm.transferSeatTypes.join(' / ') : orderForm.seatType,
+      transferSeatTypes: isSelectedTransfer.value ? orderForm.transferSeatTypes : undefined,
+      isStudent: orderForm.isStudent
     })
     trainStore.setCurrentOrder(order)
     ElMessage.success('下单成功，请在10分钟内支付')
@@ -755,13 +847,12 @@ const clearTimers = () => {
 }
 
 watch(
-  () => [searchForm.startStation, searchForm.endStation, searchForm.trainTypes.join(','), searchForm.seatTypes.join(',')],
+  () => [activeMode.value, searchForm.startStation, searchForm.endStation, searchForm.date, searchForm.trainTypes.join(','), searchForm.seatTypes.join(',')],
   scheduleRefresh
 )
 
 onMounted(async () => {
   await loadOptions()
-  await refreshCalendarData()
   await refreshTrainData()
 })
 
@@ -817,8 +908,12 @@ onUnmounted(clearTimers)
 }
 
 .filter-card,
-.calendar-card {
+.date-card {
   border-radius: 8px;
+}
+
+.mode-tabs {
+  margin-bottom: 12px;
 }
 
 .card-header,
@@ -864,33 +959,24 @@ onUnmounted(clearTimers)
   width: 100%;
 }
 
-.calendar-actions {
+.date-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.calendar-weekdays,
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+.date-strip {
+  display: flex;
   gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
 }
 
-.calendar-weekdays {
-  margin-bottom: 8px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  text-align: center;
-}
-
-.calendar-blank,
-.calendar-grid button {
-  min-height: 82px;
+.date-strip button {
+  flex: 0 0 112px;
+  min-height: 76px;
   border-radius: 8px;
-}
-
-.calendar-grid button {
   border: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
   color: var(--el-text-color-primary);
@@ -900,50 +986,89 @@ onUnmounted(clearTimers)
   align-items: center;
   justify-content: center;
   gap: 5px;
+  scroll-snap-align: start;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.calendar-grid button:hover {
+.date-strip button:hover {
   border-color: var(--el-color-primary);
   box-shadow: 0 8px 20px rgba(35, 65, 95, 0.12);
   transform: translateY(-1px);
 }
 
-.calendar-grid button.active {
+.date-strip button.active {
   border-color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
 }
 
-.calendar-grid button.today span {
+.date-strip button.today span {
   color: var(--el-color-primary);
   font-weight: 700;
 }
 
-.calendar-grid button.disabled {
-  color: var(--el-text-color-disabled);
-  background: var(--el-fill-color-lighter);
-}
-
-.calendar-grid button span {
-  font-size: 16px;
-}
-
-.calendar-grid button strong {
-  color: var(--el-color-primary);
-  font-size: 15px;
-}
-
-.calendar-grid button.disabled strong {
+.date-strip button span {
+  font-size: 13px;
   color: var(--el-text-color-secondary);
 }
 
-.calendar-grid button small {
+.date-strip button strong {
+  color: var(--el-color-primary);
+  font-size: 18px;
+}
+
+.date-strip button small {
   color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 
 .train-table {
   width: 100%;
+}
+
+.transfer-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.transfer-line {
+  display: grid;
+  grid-template-columns: 52px 76px 58px minmax(120px, 1fr) 96px minmax(120px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.transfer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.transfer-line strong,
+.transfer-meta strong {
+  color: var(--el-text-color-primary);
+}
+
+.transfer-line span,
+.transfer-line small,
+.transfer-meta span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.segment-index {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.segment-seats {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pagination-bar {
@@ -989,17 +1114,13 @@ onUnmounted(clearTimers)
     grid-template-columns: 1fr;
   }
 
-  .calendar-grid {
-    gap: 6px;
-  }
-
-  .calendar-blank,
-  .calendar-grid button {
+  .date-strip button {
+    flex-basis: 92px;
     min-height: 68px;
   }
 
-  .calendar-grid button small {
-    display: none;
+  .transfer-line {
+    grid-template-columns: 1fr;
   }
 }
 </style>

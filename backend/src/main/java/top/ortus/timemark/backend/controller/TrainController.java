@@ -8,11 +8,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import top.ortus.timemark.backend.common.ApiResponse;
-import top.ortus.timemark.backend.dao.Product;
 import top.ortus.timemark.backend.dto.module.TrainCalendarDayResponse;
 import top.ortus.timemark.backend.dto.module.TrainCalendarRequest;
 import top.ortus.timemark.backend.dto.module.TrainSearchRequest;
 import top.ortus.timemark.backend.dto.module.TrainStationOptionsResponse;
+import top.ortus.timemark.backend.dto.module.TrainTicketDTO;
 import top.ortus.timemark.backend.service.TrainService;
 
 import java.util.List;
@@ -29,8 +29,13 @@ public class TrainController {
     }
 
     @PostMapping("/search")
-    public ApiResponse<List<Product>> search(@RequestBody(required = false) TrainSearchRequest request) {
+    public ApiResponse<List<TrainTicketDTO>> search(@RequestBody(required = false) TrainSearchRequest request) {
         return ApiResponse.ok(trainService.search(request));
+    }
+
+    @PostMapping("/transfer/search")
+    public ApiResponse<List<TrainTicketDTO>> searchTransfers(@RequestBody(required = false) TrainSearchRequest request) {
+        return ApiResponse.ok(trainService.searchTransfers(request));
     }
 
     @PostMapping("/calendar")
@@ -44,7 +49,7 @@ public class TrainController {
     }
 
     @GetMapping("/detail/{productId}")
-    public ApiResponse<Product> searchById(@PathVariable("productId") Integer productId) {
+    public ApiResponse<TrainTicketDTO> searchById(@PathVariable("productId") String productId) {
         return ApiResponse.ok(trainService.searchById(productId));
     }
 }

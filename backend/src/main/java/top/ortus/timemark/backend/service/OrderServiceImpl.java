@@ -16,6 +16,7 @@ import top.ortus.timemark.backend.dto.module.TrainChangeResponse;
 import top.ortus.timemark.backend.dto.module.TrainOrderRequest;
 import top.ortus.timemark.backend.dto.module.TrainOrderResponse;
 import top.ortus.timemark.backend.dto.module.TrainRefundResponse;
+import top.ortus.timemark.backend.dto.module.TrainTicketDTO;
 import top.ortus.timemark.backend.dto.module.VacationAssistantResponse;
 import top.ortus.timemark.backend.dto.module.VacationOrderRequest;
 import top.ortus.timemark.backend.dto.module.VacationRefundResponse;
@@ -51,10 +52,17 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private ConversationService conversationService;
 
+    @Autowired
+    private TrainService trainService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TrainOrderResponse createTrainOrder(Long userId, TrainOrderRequest request) {
         validateRequest(request);
+
+        if (request.getProductId().startsWith("MCP:")) {
+            return createRemoteTrainOrder(userId, request);
+        }
 
         Product product = productMapper.selectById(request.getProductId());
         if (product == null || !"TRAIN".equals(product.getProductType()) || !Integer.valueOf(1).equals(product.getStatus())) {
@@ -83,6 +91,40 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(PENDING);
         order.setPayDeadline(now.plusMinutes(10));
         order.setExtraInfo(writeExtraInfo(product, request));
+        order.setCreateTime(now);
+        order.setUpdateTime(now);
+        orderMapper.insert(order);
+
+        return toResponse(order);
+    }
+
+    private TrainOrderResponse createRemoteTrainOrder(Long userId, TrainOrderRequest request) {
+        TrainTicketDTO ticket = trainService.searchById(request.getProductId());
+        BigDecimal originalAmount;
+        if (isTransferTicket(ticket)) {
+            originalAmount = calculateTransferOriginalAmount(ticket, request);
+        } else if (ticket.getSeats() == null || ticket.getSeats().getOrDefault(request.getSeatType(), 0) <= 0) {
+            throw new IllegalArgumentException("所选座位类型余票不足");
+        } else {
+            originalAmount = BigDecimal.valueOf(
+                ticket.getPrices() == null ? ticket.getPrice() : ticket.getPrices().getOrDefault(request.getSeatType(), ticket.getPrice())
+            ).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal payAmount = calculatePayAmount(originalAmount, request);
+        LocalDateTime now = LocalDateTime.now();
+
+        Order order = new Order();
+        order.setOrderNo(generateOrderNo());
+        order.setUserId(userId);
+        order.setOrderType("TRAIN");
+        order.setTotalAmount(originalAmount);
+        order.setPayAmount(payAmount);
+        order.setPointsDeduct(0);
+        order.setSource("PC");
+        order.setStatus(PENDING);
+        order.setPayDeadline(now.plusMinutes(10));
+        order.setExtraInfo(writeRemoteTrainExtraInfo(ticket, request, originalAmount));
         order.setCreateTime(now);
         order.setUpdateTime(now);
         orderMapper.insert(order);
@@ -476,7 +518,11 @@ public class OrderServiceImpl implements OrderService {
         if (request.getPassengerAge() == null || request.getPassengerAge() < 1 || request.getPassengerAge() > 120) {
             throw new IllegalArgumentException("年龄必须为1-120之间的正整数");
         }
-        if (request.getSeatType() == null || request.getSeatType().isBlank()) {
+        boolean hasDirectSeatType = request.getSeatType() != null && !request.getSeatType().isBlank();
+        boolean hasTransferSeatTypes = request.getTransferSeatTypes() != null
+            && request.getTransferSeatTypes().size() >= 2
+            && request.getTransferSeatTypes().stream().limit(2).allMatch(seat -> seat != null && !seat.isBlank());
+        if (!hasDirectSeatType && !hasTransferSeatTypes) {
             throw new IllegalArgumentException("座位类型不能为空");
         }
     }
@@ -502,6 +548,78 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception ex) {
             throw new IllegalArgumentException("订单信息序列化失败");
         }
+    }
+
+    private String writeRemoteTrainExtraInfo(TrainTicketDTO ticket, TrainOrderRequest request, BigDecimal originalAmount) {
+        Map<String, Object> extraInfo = new LinkedHashMap<>();
+        Map<String, Object> extra = ticket.getExtra() == null ? Map.of() : ticket.getExtra();
+        extraInfo.put("trainName", ticket.getName());
+        extraInfo.put("startStation", extra.get("start_station"));
+        extraInfo.put("endStation", extra.get("end_station"));
+        extraInfo.put("date", extra.get("date"));
+        extraInfo.put("departTime", extra.get("depart_time"));
+        extraInfo.put("arriveTime", extra.get("arrive_time"));
+        extraInfo.put("duration", extra.get("duration"));
+        extraInfo.put("trainType", extra.get("train_type"));
+        extraInfo.put("transfer", Boolean.TRUE.equals(extra.get("transfer")));
+        extraInfo.put("middleStation", extra.get("middle_station"));
+        extraInfo.put("waitTime", extra.get("wait_time"));
+        extraInfo.put("segments", extra.get("segments"));
+        extraInfo.put("seatType", request.getSeatType());
+        extraInfo.put("transferSeatTypes", request.getTransferSeatTypes());
+        extraInfo.put("ticketType", resolveTicketType(request));
+        extraInfo.put("discountRate", resolveDiscountRate(request));
+        extraInfo.put("originalPrice", originalAmount);
+        extraInfo.put("passengerName", request.getPassengerName());
+        extraInfo.put("passengerPhone", request.getPassengerPhone());
+        extraInfo.put("passengerAge", request.getPassengerAge());
+        extraInfo.put("productId", null);
+        extraInfo.put("remoteTicketId", request.getProductId());
+        try {
+            return objectMapper.writeValueAsString(extraInfo);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("订单信息序列化失败");
+        }
+    }
+
+    private boolean isTransferTicket(TrainTicketDTO ticket) {
+        return ticket != null
+            && ticket.getExtra() != null
+            && Boolean.TRUE.equals(ticket.getExtra().get("transfer"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private BigDecimal calculateTransferOriginalAmount(TrainTicketDTO ticket, TrainOrderRequest request) {
+        List<String> seatTypes = request.getTransferSeatTypes();
+        if (seatTypes == null || seatTypes.size() < 2) {
+            throw new IllegalArgumentException("请选择两段车次的座位类型");
+        }
+        Object rawSegments = ticket.getExtra() == null ? null : ticket.getExtra().get("segments");
+        if (!(rawSegments instanceof List<?> segments) || segments.size() < 2) {
+            throw new IllegalArgumentException("中转车票信息无效");
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (int i = 0; i < 2; i++) {
+            Object rawSegment = segments.get(i);
+            if (!(rawSegment instanceof Map<?, ?> segment)) {
+                throw new IllegalArgumentException("中转车票信息无效");
+            }
+            String seatType = seatTypes.get(i);
+            Map<String, Object> seats = segment.get("seats") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+            int count = parseInt(seats.get(seatType), 0);
+            if (count <= 0) {
+                throw new IllegalArgumentException("第" + (i + 1) + "段所选座位类型余票不足");
+            }
+            Map<String, Object> prices = segment.get("prices") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+            double price = parseDouble(prices.get(seatType), 0.0);
+            if (price <= 0) {
+                Object fallback = segment.get("price");
+                price = parseDouble(fallback, 0.0);
+            }
+            total = total.add(BigDecimal.valueOf(price).setScale(2, RoundingMode.HALF_UP));
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
     }
 
     private void validateVacationRequest(VacationOrderRequest request) {
@@ -641,6 +759,17 @@ public class OrderServiceImpl implements OrderService {
         }
         try {
             return value == null ? fallback : Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
+    }
+
+    private double parseDouble(Object value, double fallback) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return value == null ? fallback : Double.parseDouble(String.valueOf(value).replace("¥", "").trim());
         } catch (NumberFormatException ex) {
             return fallback;
         }

@@ -1,143 +1,674 @@
 package top.ortus.timemark.backend.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
-import top.ortus.timemark.backend.dao.Product;
-import top.ortus.timemark.backend.dao.ProductMapper;
 import top.ortus.timemark.backend.dto.module.TrainCalendarDayResponse;
 import top.ortus.timemark.backend.dto.module.TrainCalendarRequest;
 import top.ortus.timemark.backend.dto.module.TrainSearchRequest;
 import top.ortus.timemark.backend.dto.module.TrainStationOptionsResponse;
+import top.ortus.timemark.backend.dto.module.TrainTicketDTO;
+import top.ortus.timemark.backend.utils.Constant;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
 @Service
 public class TrainServiceImpl implements TrainService {
-    private static final List<String> TRAIN_STATIONS = List.of(
-        "\u5317\u4eac\u5357",
-        "\u4e0a\u6d77\u8679\u6865",
-        "\u5e7f\u5dde\u5357",
-        "\u6df1\u5733\u5317",
-        "\u676d\u5dde\u4e1c",
-        "\u5357\u4eac\u5357",
-        "\u6b66\u6c49",
-        "\u897f\u5b89\u5317",
-        "\u6210\u90fd\u4e1c",
-        "\u91cd\u5e86\u5317",
-        "\u90d1\u5dde\u4e1c",
-        "\u957f\u6c99\u5357",
-        "\u5929\u6d25\u897f",
-        "\u9752\u5c9b\u5317",
-        "\u53a6\u95e8\u5317",
-        "\u6606\u660e\u5357",
-        "\u5357\u660c\u897f",
-        "\u5408\u80a5\u5357",
-        "\u82cf\u5dde\u5317",
-        "\u6d4e\u5357\u897f"
+    private static final List<String> SEAT_ORDER = List.of("商务座", "一等座", "二等座", "软卧", "硬卧", "硬座");
+    private static final Map<String, String> API_SEAT_NAMES = Map.of(
+        "business", "商务座",
+        "first_class", "一等座",
+        "second_class", "二等座",
+        "soft_sleeper", "软卧",
+        "hard_sleeper", "硬卧",
+        "hard_seat", "硬座"
     );
 
-    @Autowired
-    private ProductMapper productMapper;
+    private final TrainMcpClient trainMcpClient;
+    private final ObjectMapper objectMapper;
+    private final Map<String, CacheEntry> ticketCache = new ConcurrentHashMap<>();
 
-    @Override
-    public List<Product> search(TrainSearchRequest request) {
-        LambdaQueryWrapper<Product> queryWrapper = activeTrainQuery();
-        if (request != null) {
-            applyExtraEquals(queryWrapper, "start_station", request.getStartStation());
-            applyExtraEquals(queryWrapper, "end_station", request.getEndStation());
-            applyExtraEquals(queryWrapper, "date", request.getDate());
-            applyAnyTag(queryWrapper, request.getTrainTypes());
-            applyAnyTag(queryWrapper, request.getSeatTypes());
-        }
-        queryWrapper.orderByAsc(Product::getId);
-        if (request == null || isBlank(request.getDate())) {
-            queryWrapper.last("LIMIT 500");
-        }
-        return productMapper.selectList(queryWrapper);
+    public TrainServiceImpl(TrainMcpClient trainMcpClient, ObjectMapper objectMapper) {
+        this.trainMcpClient = trainMcpClient;
+        this.objectMapper = objectMapper;
     }
 
     @Override
-    public List<TrainCalendarDayResponse> calendar(TrainCalendarRequest request) {
-        LambdaQueryWrapper<Product> queryWrapper = activeTrainQuery();
-        if (request != null) {
-            applyExtraEquals(queryWrapper, "start_station", request.getStartStation());
-            applyExtraEquals(queryWrapper, "end_station", request.getEndStation());
-            applyExtraMonth(queryWrapper, request.getMonth());
-            applyAnyTag(queryWrapper, request.getTrainTypes());
-            applyAnyTag(queryWrapper, request.getSeatTypes());
+    public List<TrainTicketDTO> search(TrainSearchRequest request) {
+        if (request == null || isBlank(request.getStartStation()) || isBlank(request.getEndStation())) {
+            return List.of();
         }
-        queryWrapper.select(Product::getStock, Product::getSoldCount, Product::getExtra);
-        List<Product> trains = productMapper.selectList(queryWrapper);
-        Map<String, List<Product>> byDate = trains.stream()
-            .filter(product -> product.getExtra() != null && product.getExtra().get("date") != null)
-            .collect(Collectors.groupingBy(product -> String.valueOf(product.getExtra().get("date"))));
-        return byDate.entrySet().stream()
-            .map(entry -> new TrainCalendarDayResponse(
-                entry.getKey(),
-                entry.getValue().stream().mapToInt(this::availableTickets).sum(),
-                (int) entry.getValue().stream().filter(product -> availableTickets(product) > 0).count()
-            ))
-            .sorted(Comparator.comparing(TrainCalendarDayResponse::getDate))
+        List<String> dates = resolveSearchDates(request);
+        return dates.stream()
+            .flatMap(date -> queryTickets(request.getStartStation(), request.getEndStation(), date, request.getTrainTypes(), request.getSeatTypes()).stream())
+            .sorted(Comparator
+                .comparing((TrainTicketDTO ticket) -> String.valueOf(ticket.getExtra().get("date")))
+                .thenComparing(ticket -> String.valueOf(ticket.getExtra().get("depart_time")))
+                .thenComparing(TrainTicketDTO::getName))
             .toList();
     }
 
     @Override
-    public Product searchById(Integer productId) {
-        return productMapper.selectById(productId);
+    public List<TrainTicketDTO> searchTransfers(TrainSearchRequest request) {
+        if (request == null || isBlank(request.getStartStation()) || isBlank(request.getEndStation())) {
+            return List.of();
+        }
+        List<String> dates = resolveSearchDates(request);
+        return dates.stream()
+            .flatMap(date -> queryTransfers(request.getStartStation(), request.getEndStation(), date, request.getTrainTypes(), request.getSeatTypes()).stream())
+            .sorted(Comparator
+                .comparing((TrainTicketDTO ticket) -> String.valueOf(ticket.getExtra().get("date")))
+                .thenComparing(ticket -> String.valueOf(ticket.getExtra().get("depart_time")))
+                .thenComparing(TrainTicketDTO::getName))
+            .toList();
+    }
+
+    @Override
+    public List<TrainCalendarDayResponse> calendar(TrainCalendarRequest request) {
+        if (request == null || isBlank(request.getStartStation()) || isBlank(request.getEndStation()) || isBlank(request.getMonth())) {
+            return List.of();
+        }
+        YearMonth month = YearMonth.parse(request.getMonth());
+        List<TrainCalendarDayResponse> days = new ArrayList<>();
+        long deadline = System.currentTimeMillis() + 10_000L;
+        for (int day = 1; day <= month.lengthOfMonth(); day++) {
+            if (System.currentTimeMillis() >= deadline) {
+                break;
+            }
+            String date = month.atDay(day).toString();
+            TrainCalendarDayResponse stat = queryCalendarDay(request.getStartStation(), request.getEndStation(), date, request.getTrainTypes(), request.getSeatTypes());
+            if (stat.getTicketCount() > 0 || stat.getTrainCount() > 0) {
+                days.add(stat);
+            }
+        }
+        return days;
+    }
+
+    @Override
+    public TrainTicketDTO searchById(String ticketId) {
+        return decodeTicketId(ticketId);
     }
 
     @Override
     public TrainStationOptionsResponse stationOptions() {
-        return new TrainStationOptionsResponse(
-            TRAIN_STATIONS,
-            TRAIN_STATIONS,
-            defaultDateOptions()
+        List<String> stations = List.of(Constant.stations);
+        return new TrainStationOptionsResponse(stations, stations, defaultDateOptions());
+    }
+
+    public TrainTicketDTO decodeTicketId(String ticketId) {
+        if (ticketId == null || !ticketId.startsWith("MCP:")) {
+            throw new IllegalArgumentException("远程车票信息无效");
+        }
+        try {
+            String json = new String(Base64.getUrlDecoder().decode(ticketId.substring(4)), StandardCharsets.UTF_8);
+            return objectMapper.readValue(json, TrainTicketDTO.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("远程车票信息解析失败");
+        }
+    }
+
+    private List<TrainTicketDTO> queryTickets(String startStation, String endStation, String date, List<String> trainTypes, List<String> seatTypes) {
+        String cacheKey = cacheKey(startStation, endStation, date, trainTypes, seatTypes);
+        CacheEntry cached = ticketCache.get(cacheKey);
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
+            return cached.tickets();
+        }
+        Map<String, Object> ticketResponse = queryTicketTool(startStation, endStation, date);
+        List<Map<String, Object>> trains = readTrainRows(ticketResponse);
+        List<TrainTicketDTO> tickets = trains.stream()
+            .map(train -> toTicket(startStation, endStation, date, train, Map.of()))
+            .filter(ticket -> ticketMatchesTrainTypes(ticket, trainTypes))
+            .filter(ticket -> ticketMatchesSeatTypes(ticket, seatTypes))
+            .toList();
+        ticketCache.put(cacheKey, new CacheEntry(tickets, System.currentTimeMillis() + 2 * 60 * 1000L));
+        return tickets;
+    }
+
+    private Map<String, Object> queryTicketTool(String startStation, String endStation, String date) {
+        Map<String, Object> arguments = Map.of(
+            "from_station", startStation,
+            "to_station", endStation,
+            "train_date", date
         );
+        return trainMcpClient.callToolFast("query-tickets", arguments);
     }
 
-    private LambdaQueryWrapper<Product> activeTrainQuery() {
-        LambdaQueryWrapper<Product> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Product::getProductType, "TRAIN").eq(Product::getStatus, 1);
-        return queryWrapper;
+    private List<TrainTicketDTO> queryTransfers(String startStation, String endStation, String date, List<String> trainTypes, List<String> seatTypes) {
+        String cacheKey = "TRANSFER_V2|" + cacheKey(startStation, endStation, date, trainTypes, seatTypes);
+        CacheEntry cached = ticketCache.get(cacheKey);
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
+            return cached.tickets();
+        }
+        Map<String, Object> transferResponse = queryTransferTool(startStation, endStation, date);
+        List<TrainTicketDTO> tickets = readTransferRows(transferResponse).stream()
+            .map(transfer -> toTransferTicket(startStation, endStation, date, transfer))
+            .filter(Objects::nonNull)
+            .filter(ticket -> transferMatchesTrainTypes(ticket, trainTypes))
+            .filter(ticket -> transferMatchesSeatTypes(ticket, seatTypes))
+            .toList();
+        ticketCache.put(cacheKey, new CacheEntry(tickets, System.currentTimeMillis() + 2 * 60 * 1000L));
+        return tickets;
     }
 
-    private void applyExtraEquals(LambdaQueryWrapper<Product> queryWrapper, String key, String expected) {
-        if (!isBlank(expected)) {
-            queryWrapper.apply("JSON_UNQUOTE(JSON_EXTRACT(extra, '$." + key + "')) = {0}", expected);
+    private Map<String, Object> queryTransferTool(String startStation, String endStation, String date) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("from_station", startStation);
+        arguments.put("to_station", endStation);
+        arguments.put("train_date", date);
+        arguments.put("middle_station", "");
+        arguments.put("isShowWZ", "N");
+        arguments.put("purpose_codes", "00");
+        return trainMcpClient.callToolFast("query-transfer", arguments);
+    }
+
+    private TrainCalendarDayResponse queryCalendarDay(String startStation, String endStation, String date, List<String> trainTypes, List<String> seatTypes) {
+        Map<String, Object> ticketResponse = queryTicketTool(startStation, endStation, date);
+        List<TrainTicketDTO> tickets = readTrainRows(ticketResponse).stream()
+            .map(train -> toTicket(startStation, endStation, date, train, Map.of()))
+            .filter(ticket -> ticketMatchesTrainTypes(ticket, trainTypes))
+            .filter(ticket -> ticketMatchesSeatTypes(ticket, seatTypes))
+            .toList();
+        int ticketCount = tickets.stream().mapToInt(ticket -> Objects.requireNonNullElse(ticket.getStock(), 0)).sum();
+        int trainCount = tickets.size();
+        return new TrainCalendarDayResponse(date, ticketCount, trainCount);
+    }
+
+    private String cacheKey(String startStation, String endStation, String date, List<String> trainTypes, List<String> seatTypes) {
+        return startStation + "|" + endStation + "|" + date + "|"
+            + String.join(",", trainTypes == null ? List.of() : trainTypes) + "|"
+            + String.join(",", seatTypes == null ? List.of() : seatTypes);
+    }
+
+    private TrainTicketDTO toTicket(String startStation, String endStation, String date, Map<String, Object> train, Map<String, Map<String, Double>> pricesByTrainCode) {
+        String trainCode = extractTrainNo(train);
+        String trainType = resolveTrainType(trainCode);
+        Map<String, Integer> parsedSeats = normalizeSeats(readMap(firstValue(train, "seats", "seat_info", "tickets")));
+        final Map<String, Integer> seats = parsedSeats.isEmpty() ? defaultSeatsForTrainType(trainType) : orderSeats(parsedSeats);
+        Map<String, Double> prices = completePrices(
+            pricesByTrainCode.getOrDefault(trainCode, Map.of()),
+            trainType,
+            seats.keySet()
+        );
+        List<String> tags = new ArrayList<>();
+        tags.add(trainType);
+        tags.addAll(seats.keySet());
+        double minPrice = seats.keySet().stream()
+            .map(prices::get)
+            .filter(Objects::nonNull)
+            .min(Double::compareTo)
+            .orElse(0.0);
+        int stock = seats.values().stream().mapToInt(Integer::intValue).sum();
+
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("start_station", startStation);
+        extra.put("end_station", endStation);
+        extra.put("date", date);
+        extra.put("depart_time", firstText(train.get("start_time"), train.get("depart_time")));
+        extra.put("arrive_time", firstText(train.get("arrive_time"), train.get("arrival_time")));
+        extra.put("duration", valueOf(train.get("duration")));
+        extra.put("train_type", trainType);
+        extra.put("train_no", trainCode);
+        extra.put("train_code", trainCode);
+
+        TrainTicketDTO ticket = new TrainTicketDTO(null, trainCode, minPrice, stock, 0, tags, extra, seats, prices);
+        ticket.setId(encodeTicketId(ticket));
+        return ticket;
+    }
+
+    private TrainTicketDTO toTransferTicket(String startStation, String endStation, String date, Map<String, Object> transfer) {
+        List<Map<String, Object>> rawSegments = readList(transfer.get("segments"));
+        if (rawSegments.size() < 2) {
+            return null;
+        }
+
+        List<TrainTicketDTO> segmentTickets = rawSegments.stream()
+            .limit(2)
+            .map(segment -> toTransferSegmentTicket(startStation, endStation, date, segment))
+            .toList();
+        if (segmentTickets.size() < 2) {
+            return null;
+        }
+
+        TrainTicketDTO first = segmentTickets.get(0);
+        TrainTicketDTO second = segmentTickets.get(1);
+        Map<String, Integer> seats = mergeSeats(first.getSeats(), second.getSeats());
+        Map<String, Double> prices = mergeTransferPrices(first.getPrices(), second.getPrices(), seats.keySet());
+        List<String> tags = new ArrayList<>();
+        tags.addAll(segmentTickets.stream()
+            .map(ticket -> String.valueOf(ticket.getExtra().get("train_type")))
+            .distinct()
+            .toList());
+        tags.addAll(seats.keySet());
+        double minPrice = prices.values().stream().filter(price -> price > 0).min(Double::compareTo).orElse(0.0);
+        int stock = seats.values().stream().mapToInt(Integer::intValue).sum();
+        String firstTrain = first.getName();
+        String secondTrain = second.getName();
+
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("transfer", true);
+        extra.put("start_station", startStation);
+        extra.put("end_station", endStation);
+        extra.put("middle_station", firstText(transfer.get("middle_station"), first.getExtra().get("end_station")));
+        extra.put("date", date);
+        extra.put("depart_time", first.getExtra().get("depart_time"));
+        extra.put("arrive_time", second.getExtra().get("arrive_time"));
+        extra.put("duration", firstText(transfer.get("total_duration"), transfer.get("duration")));
+        extra.put("wait_time", firstText(transfer.get("wait_time"), transfer.get("transfer_time")));
+        extra.put("train_type", String.join("/", tags.stream().filter(type -> List.of("高铁", "动车", "普速").contains(type)).toList()));
+        extra.put("segments", segmentTickets.stream().map(this::ticketSnapshot).toList());
+
+        TrainTicketDTO ticket = new TrainTicketDTO(null, firstTrain + " / " + secondTrain, minPrice, stock, 0, tags, extra, seats, prices);
+        ticket.setId(encodeTicketId(ticket));
+        return ticket;
+    }
+
+    private TrainTicketDTO toTransferSegmentTicket(String startStation, String endStation, String date, Map<String, Object> segment) {
+        String from = firstText(segment.get("from_station"), segment.get("start_station"));
+        String to = firstText(segment.get("to_station"), segment.get("end_station"));
+        String trainNo = extractTrainNo(segment);
+        TrainTicketDTO ticket = toTicket(
+            isBlank(from) ? startStation : from,
+            isBlank(to) ? endStation : to,
+            date,
+            segment,
+            Map.of()
+        );
+        Map<String, Object> extra = new LinkedHashMap<>(ticket.getExtra() == null ? Map.of() : ticket.getExtra());
+        extra.put("train_no", trainNo);
+        extra.put("train_code", trainNo);
+        extra.put("train_type", resolveTrainType(trainNo));
+        ticket.setName(trainNo);
+        ticket.setExtra(extra);
+        return ticket;
+    }
+
+    private Map<String, Object> ticketSnapshot(TrainTicketDTO ticket) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("id", ticket.getId());
+        snapshot.put("name", ticket.getName());
+        snapshot.put("price", ticket.getPrice());
+        snapshot.put("stock", ticket.getStock());
+        snapshot.put("extra", ticket.getExtra());
+        snapshot.put("train_no", ticket.getExtra() == null ? ticket.getName() : firstText(ticket.getExtra().get("train_no"), ticket.getName()));
+        snapshot.put("train_type", ticket.getExtra() == null ? resolveTrainType(ticket.getName()) : firstText(ticket.getExtra().get("train_type"), resolveTrainType(ticket.getName())));
+        snapshot.put("seats", ticket.getSeats());
+        snapshot.put("prices", ticket.getPrices());
+        return snapshot;
+    }
+
+    private Map<String, Integer> mergeSeats(Map<String, Integer> firstSeats, Map<String, Integer> secondSeats) {
+        Map<String, Integer> seats = new LinkedHashMap<>();
+        for (String seat : SEAT_ORDER) {
+            boolean exists = firstSeats.containsKey(seat) || secondSeats.containsKey(seat);
+            if (exists) {
+                int firstCount = firstSeats.getOrDefault(seat, 0);
+                int secondCount = secondSeats.getOrDefault(seat, 0);
+                seats.put(seat, firstCount + secondCount);
+            }
+        }
+        return seats;
+    }
+
+    private Map<String, Double> mergeTransferPrices(Map<String, Double> firstPrices, Map<String, Double> secondPrices, Set<String> seats) {
+        Map<String, Double> prices = new LinkedHashMap<>();
+        double firstFallback = minPositivePrice(firstPrices);
+        double secondFallback = minPositivePrice(secondPrices);
+        for (String seat : SEAT_ORDER) {
+            if (!seats.contains(seat)) {
+                continue;
+            }
+            double first = firstPrices.getOrDefault(seat, firstFallback);
+            double second = secondPrices.getOrDefault(seat, secondFallback);
+            prices.put(seat, Math.round((first + second) * 10.0) / 10.0);
+        }
+        return prices;
+    }
+
+    private double minPositivePrice(Map<String, Double> prices) {
+        return prices.values().stream()
+            .filter(price -> price != null && price > 0)
+            .min(Double::compareTo)
+            .orElse(0.0);
+    }
+
+    private Map<String, Map<String, Double>> pricesByTrainCode(Map<String, Object> priceResponse) {
+        Map<String, Map<String, Double>> result = new LinkedHashMap<>();
+        for (Map<String, Object> item : readList(priceResponse.get("data"))) {
+            String trainCode = firstText(item.get("train_code"), item.get("train_no"));
+            if (!isBlank(trainCode)) {
+                result.put(trainCode, normalizePrices(readMap(item.get("prices"))));
+            }
+        }
+        return result;
+    }
+
+    private String encodeTicketId(TrainTicketDTO ticket) {
+        try {
+            String json = objectMapper.writeValueAsString(ticket);
+            return "MCP:" + Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("远程车票信息编码失败");
         }
     }
 
-    private void applyExtraMonth(LambdaQueryWrapper<Product> queryWrapper, String month) {
-        if (!isBlank(month)) {
-            queryWrapper.apply("JSON_UNQUOTE(JSON_EXTRACT(extra, '$.date')) LIKE {0}", month + "%");
+    private List<String> resolveSearchDates(TrainSearchRequest request) {
+        if (!isBlank(request.getDate())) {
+            return List.of(request.getDate());
         }
+        YearMonth month = !isBlank(request.getMonth()) ? YearMonth.parse(request.getMonth()) : YearMonth.now();
+        LocalDate start = month.equals(YearMonth.now()) ? LocalDate.now() : month.atDay(1);
+        return List.of(start.toString());
     }
 
-    private void applyAnyTag(LambdaQueryWrapper<Product> queryWrapper, List<String> expectedTags) {
-        if (expectedTags == null || expectedTags.isEmpty()) {
-            return;
+    private boolean ticketMatchesTrainTypes(TrainTicketDTO ticket, List<String> trainTypes) {
+        if (trainTypes == null || trainTypes.isEmpty()) {
+            return true;
         }
-        queryWrapper.and(wrapper -> {
-            for (int i = 0; i < expectedTags.size(); i++) {
-                String tag = expectedTags.get(i);
-                if (i == 0) {
-                    wrapper.apply("JSON_CONTAINS(category_tags, JSON_QUOTE({0}))", tag);
-                } else {
-                    wrapper.or().apply("JSON_CONTAINS(category_tags, JSON_QUOTE({0}))", tag);
-                }
+        String trainType = String.valueOf(ticket.getExtra().get("train_type"));
+        if (trainTypes.contains(trainType)) {
+            return true;
+        }
+        String trainCodeType = resolveTrainType(ticket.getName());
+        return trainTypes.contains(trainCodeType);
+    }
+
+    private boolean ticketMatchesSeatTypes(TrainTicketDTO ticket, List<String> seatTypes) {
+        return seatTypes == null || seatTypes.isEmpty() || seatTypes.stream().anyMatch(seat -> ticket.getSeats().containsKey(seat));
+    }
+
+    private boolean transferMatchesTrainTypes(TrainTicketDTO ticket, List<String> trainTypes) {
+        if (trainTypes == null || trainTypes.isEmpty()) {
+            return true;
+        }
+        return transferSegments(ticket).stream()
+            .map(segment -> valueOf(readMap(segment.get("extra")).get("train_type")))
+            .anyMatch(trainTypes::contains);
+    }
+
+    private boolean transferMatchesSeatTypes(TrainTicketDTO ticket, List<String> seatTypes) {
+        if (seatTypes == null || seatTypes.isEmpty()) {
+            return true;
+        }
+        return transferSegments(ticket).stream()
+            .map(segment -> readMap(segment.get("seats")))
+            .anyMatch(seats -> seatTypes.stream().anyMatch(seats::containsKey));
+    }
+
+    private Map<String, Integer> normalizeSeats(Map<String, Object> rawSeats) {
+        Map<String, Integer> seats = new LinkedHashMap<>();
+        rawSeats.forEach((key, value) -> {
+            String seatName = normalizeSeatName(key);
+            if (SEAT_ORDER.contains(seatName)) {
+                seats.put(seatName, parseSeatCount(value));
             }
         });
+        return seats;
     }
 
-    private int availableTickets(Product product) {
-        return Math.max(0, Objects.requireNonNullElse(product.getStock(), 0) - Objects.requireNonNullElse(product.getSoldCount(), 0));
+    private Map<String, Integer> defaultSeatsForTrainType(String trainType) {
+        Map<String, Integer> seats = new LinkedHashMap<>();
+        if ("普速".equals(trainType)) {
+            seats.put("硬座", 20);
+            seats.put("硬卧", 10);
+            seats.put("软卧", 6);
+        } else {
+            seats.put("二等座", 20);
+            seats.put("一等座", 10);
+            seats.put("商务座", 5);
+        }
+        return seats;
+    }
+
+    private Map<String, Integer> orderSeats(Map<String, Integer> rawSeats) {
+        Map<String, Integer> seats = new LinkedHashMap<>();
+        for (String seat : SEAT_ORDER) {
+            if (rawSeats.containsKey(seat)) {
+                seats.put(seat, Math.max(0, rawSeats.getOrDefault(seat, 0)));
+            }
+        }
+        return seats;
+    }
+
+    private Map<String, Double> normalizePrices(Map<String, Object> rawPrices) {
+        Map<String, Double> prices = new LinkedHashMap<>();
+        rawPrices.forEach((key, value) -> {
+            String seatName = normalizeSeatName(key);
+            if (SEAT_ORDER.contains(seatName)) {
+                prices.put(seatName, parseDouble(value));
+            }
+        });
+        return prices;
+    }
+
+    private Map<String, Double> defaultPrices(String trainType, Set<String> seats) {
+        Map<String, Double> prices = new LinkedHashMap<>();
+        double base = "高铁".equals(trainType) ? 180.0 : "动车".equals(trainType) ? 120.0 : 80.0;
+        for (String seat : seats) {
+            double multiplier = switch (seat) {
+                case "商务座" -> 3.0;
+                case "一等座" -> 1.8;
+                case "二等座" -> 1.0;
+                case "软卧" -> 1.6;
+                case "硬卧" -> 1.1;
+                case "硬座" -> 0.7;
+                default -> 1.0;
+            };
+            prices.put(seat, Math.round(base * multiplier * 10.0) / 10.0);
+        }
+        return prices;
+    }
+
+    private Map<String, Double> completePrices(Map<String, Double> rawPrices, String trainType, Set<String> seats) {
+        Map<String, Double> defaults = defaultPrices(trainType, seats);
+        Map<String, Double> prices = new LinkedHashMap<>();
+        for (String seat : SEAT_ORDER) {
+            if (!seats.contains(seat)) {
+                continue;
+            }
+            double price = rawPrices.getOrDefault(seat, defaults.getOrDefault(seat, 0.0));
+            prices.put(seat, price);
+        }
+        return prices;
+    }
+
+    private String resolveTrainType(String trainNo) {
+        if (isBlank(trainNo)) {
+            return "普速";
+        }
+        char first = Character.toUpperCase(trainNo.charAt(0));
+        if (first == 'G') {
+            return "高铁";
+        }
+        if (first == 'D') {
+            return "动车";
+        }
+        return "普速";
+    }
+
+    private int parseSeatCount(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isBlank() || "--".equals(text) || "无".equals(text)) {
+            return 0;
+        }
+        if ("有".equals(text)) {
+            return 20;
+        }
+        if (text.contains("有") || text.contains("充足")) {
+            return 20;
+        }
+        if (text.contains("候补") || text.contains("无") || text.contains("售完")) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(text));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    private double parseDouble(Object value) {
+        if (value == null) {
+            return 0.0;
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value).replace("¥", "").trim());
+        } catch (NumberFormatException ex) {
+            return 0.0;
+        }
+    }
+
+    private String normalizeSeatName(String seatName) {
+        return Optional.ofNullable(seatName)
+            .map(name -> name.replace(" ", "").trim())
+            .map(name -> API_SEAT_NAMES.getOrDefault(name, name))
+            .orElse("");
+    }
+
+    private List<Map<String, Object>> readTrainRows(Map<String, Object> response) {
+        List<Map<String, Object>> trains = readList(response.get("trains"));
+        if (!trains.isEmpty()) {
+            return trains;
+        }
+        trains = readList(response.get("data"));
+        if (!trains.isEmpty()) {
+            return trains;
+        }
+        trains = readList(response.get("tickets"));
+        if (!trains.isEmpty()) {
+            return trains;
+        }
+        return List.of();
+    }
+
+    private List<Map<String, Object>> readTransferRows(Map<String, Object> response) {
+        List<Map<String, Object>> transfers = readList(response.get("transfers"));
+        if (!transfers.isEmpty()) {
+            return transfers;
+        }
+        transfers = readList(response.get("data"));
+        if (!transfers.isEmpty()) {
+            return transfers;
+        }
+        return List.of();
+    }
+
+    private List<Map<String, Object>> transferSegments(TrainTicketDTO ticket) {
+        if (ticket == null || ticket.getExtra() == null) {
+            return List.of();
+        }
+        return readList(ticket.getExtra().get("segments"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> readList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .toList();
+        }
+        return List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private Object firstValue(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String extractTrainNo(Map<String, Object> map) {
+        String direct = firstText(
+            map.get("train_no"),
+            map.get("trainNo"),
+            map.get("train_code"),
+            map.get("trainCode"),
+            map.get("station_train_code"),
+            map.get("stationTrainCode"),
+            map.get("train_number"),
+            map.get("trainNumber")
+        );
+        if (!isBlank(direct)) {
+            return direct;
+        }
+        return findTrainNo(map, 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String findTrainNo(Object value, int depth) {
+        if (value == null || depth > 4) {
+            return "";
+        }
+        if (value instanceof Map<?, ?> map) {
+            String direct = firstText(
+                map.get("train_no"),
+                map.get("trainNo"),
+                map.get("train_code"),
+                map.get("trainCode"),
+                map.get("station_train_code"),
+                map.get("stationTrainCode"),
+                map.get("train_number"),
+                map.get("trainNumber")
+            );
+            if (!isBlank(direct)) {
+                return direct;
+            }
+            for (Object nested : map.values()) {
+                String found = findTrainNo(nested, depth + 1);
+                if (!isBlank(found)) {
+                    return found;
+                }
+            }
+        }
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                String found = findTrainNo(item, depth + 1);
+                if (!isBlank(found)) {
+                    return found;
+                }
+            }
+        }
+        return "";
+    }
+
+    private String firstText(Object... values) {
+        for (Object value : values) {
+            String text = valueOf(value);
+            if (!isBlank(text)) {
+                return text;
+            }
+        }
+        return "";
+    }
+
+    private String valueOf(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private boolean isBlank(String value) {
@@ -145,9 +676,12 @@ public class TrainServiceImpl implements TrainService {
     }
 
     private List<String> defaultDateOptions() {
-        LocalDate start = LocalDate.of(2026, 6, 1);
+        LocalDate start = LocalDate.now();
         return IntStream.range(0, 180)
             .mapToObj(offset -> start.plusDays(offset).toString())
             .toList();
+    }
+
+    private record CacheEntry(List<TrainTicketDTO> tickets, long expiresAt) {
     }
 }
