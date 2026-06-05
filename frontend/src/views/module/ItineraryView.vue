@@ -17,7 +17,15 @@
           <h2>生成行程</h2>
           <el-form label-position="top">
             <el-form-item label="目的地">
-              <el-input v-model="form.destination" placeholder="例如：杭州" />
+              <el-cascader
+                v-model="destinationPath"
+                :options="chinaAdministrativeAreas"
+                :props="destinationCascaderProps"
+                placeholder="请选择省 / 市 / 区县"
+                filterable
+                clearable
+                @change="syncDestination"
+              />
             </el-form-item>
             <div class="form-row">
               <el-form-item label="天数">
@@ -128,6 +136,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { chinaAdministrativeAreas } from '@/data/chinaAdministrativeAreas'
 import {
   createPlan,
   deletePlan,
@@ -147,12 +156,19 @@ interface PlanDay {
 }
 
 const form = reactive({
-  destination: '杭州',
+  destination: '浙江杭州',
   days: 3,
   startDate: '',
   budget: '人均 3000 元',
   preferences: '慢节奏、美食、城市漫步'
 })
+
+const destinationPath = ref<string[]>(['浙江', '杭州'])
+const destinationCascaderProps = {
+  checkStrictly: true,
+  emitPath: true,
+  expandTrigger: 'hover' as const
+}
 
 const plans = ref<TravelPlan[]>([])
 const currentPlan = ref<TravelPlan | null>(null)
@@ -206,8 +222,9 @@ const loadPlans = async () => {
 }
 
 const handleGenerate = async () => {
-  if (!form.destination.trim()) {
-    ElMessage.warning('请先填写目的地')
+  syncDestination()
+  if (!destinationPath.value.length || !form.destination.trim()) {
+    ElMessage.warning('请先选择目的地')
     return
   }
   generating.value = true
@@ -301,6 +318,10 @@ const handleDelete = async () => {
   ElMessage.success('已删除')
 }
 
+const syncDestination = () => {
+  form.destination = destinationPath.value.join('')
+}
+
 onMounted(loadPlans)
 </script>
 
@@ -350,6 +371,9 @@ onMounted(loadPlans)
 }
 .form-row :deep(.el-input-number),
 .form-row :deep(.el-date-editor.el-input) {
+  width: 100%;
+}
+.planner-panel :deep(.el-cascader) {
   width: 100%;
 }
 .actions {

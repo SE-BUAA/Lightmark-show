@@ -224,3 +224,22 @@
 - `frontend/src/views/module/CommunityView.vue`
   - 游记点赞按钮根据 `liked` 状态显示“点赞”或“已赞”。
   - 点赞成功后即时更新按钮状态和点赞数。
+
+## 2026-06-05 行程 AI 接口适配与目的地选择补充
+
+- `backend/src/main/java/top/ortus/timemark/backend/utils/AIClient.java`
+  - 将模型请求体调整为 DeepSeek/OpenAI 兼容的 Chat Completions 格式。
+  - 新增 `AI_MODEL` 配置，默认 `deepseek-chat`。
+  - 保留 `AI_API_URL`、`AI_API_KEY` 缺失时的规则降级逻辑。
+
+- `frontend/src/data/chinaAdministrativeAreas.ts`
+  - 新增全国省/市/区县级联选择数据。
+  - 覆盖全国省级行政区和主要城市，部分热门城市补充区县。
+
+- `frontend/src/views/module/ItineraryView.vue`
+  - 行程生成目的地由自由输入改为省/市/区县级联选择。
+  - 生成前强制校验目的地必须来自选择器，避免任意文本直接生成。
+
+- `docs/API.md`
+  - 补充 `/api/itinerary/ai/generate` 的 AI 环境变量配置说明。
+  - 标明前端目的地由级联选择器提交。

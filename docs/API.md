@@ -464,6 +464,8 @@
 **### POST `/api/itinerary/ai/generate` `【已实现】`**
 
 - 说明：根据目的地、天数、预算和偏好生成结构化行程。AI 配置缺失或调用失败时会返回规则降级行程。
+- AI 调用配置：后端通过环境变量 `AI_API_URL`、`AI_API_KEY`、`AI_MODEL` 调用 DeepSeek/OpenAI 兼容的 Chat Completions 接口；例如 `AI_API_URL=https://api.deepseek.com/v1/chat/completions`，`AI_MODEL=deepseek-chat`。
+- 前端约束：目的地由省/市/区县级联选择器选择后提交，不再允许任意文本直接生成。
 - 请求体：
 
 ```json
