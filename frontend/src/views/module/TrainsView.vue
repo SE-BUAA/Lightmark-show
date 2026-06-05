@@ -116,11 +116,6 @@
               <span>出发日期</span>
               <strong>{{ searchForm.date }}</strong>
             </div>
-            <div class="date-actions">
-              <el-button text type="primary" @click="shiftDateWindow(-7)">前7天</el-button>
-              <el-button text type="primary" @click="resetDateWindow">今天</el-button>
-              <el-button text type="primary" @click="shiftDateWindow(7)">后7天</el-button>
-            </div>
           </div>
         </template>
 
@@ -286,11 +281,9 @@
 
     <el-dialog v-model="showTicketDialog" title="支付成功" width="420px">
       <div class="ticket-code">
-        <el-result icon="success" title="订票成功" sub-title="请妥善保存取票码" />
-        <div class="code-box">{{ ticketCode }}</div>
+        <el-result icon="success" title="订票成功" sub-title="订单已支付成功" />
         <div class="ticket-actions">
           <el-button @click="showTicketDialog = false">关闭</el-button>
-          <el-button type="warning" :loading="refundLoading" @click="handleRefundOrder">退票</el-button>
         </div>
       </div>
     </el-dialog>
@@ -309,7 +302,6 @@ import {
   getTrainOptions,
   payOrder,
   previewTrainChange,
-  refundTrainOrder,
   refundTrainOrderByPickupCode,
   searchTrainTransfers,
   searchTrains
@@ -340,12 +332,10 @@ const searchLoading = ref(false)
 const orderLoading = ref(false)
 const payLoading = ref(false)
 const cancelLoading = ref(false)
-const refundLoading = ref(false)
 const refundCodeLoading = ref(false)
 const changePreviewLoading = ref(false)
 const changeSubmitLoading = ref(false)
 const hasSearched = ref(false)
-const ticketCode = ref('')
 const refundPickupCode = ref('')
 const changePickupCode = ref('')
 const changePreview = ref<TrainChangePreviewResponse | null>(null)
@@ -354,7 +344,6 @@ const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
 const autoSearchTimer = ref<number>()
-const dateWindowStart = ref(new Date())
 const currentPage = ref(1)
 const pageSize = 10
 const activeMode = ref<'direct' | 'transfer'>('direct')
@@ -432,9 +421,9 @@ const isSelectedTransfer = computed(() => selectedTransferSegments.value.length 
 
 const dateCandidates = computed<DateCandidate[]>(() => {
   const today = formatDate(new Date())
-  return Array.from({ length: 14 }, (_, index) => {
-    const current = new Date(dateWindowStart.value)
-    current.setDate(dateWindowStart.value.getDate() + index)
+  return Array.from({ length: 30 }, (_, index) => {
+    const current = new Date()
+    current.setDate(current.getDate() + index)
     const date = formatDate(current)
     return {
       date,
@@ -584,21 +573,6 @@ const selectDate = (date: string) => {
   searchForm.date = date
   trainStore.setSearchParams({ ...searchForm })
   currentPage.value = 1
-  refreshTrainData()
-}
-
-const shiftDateWindow = (offset: number) => {
-  const next = new Date(dateWindowStart.value)
-  next.setDate(dateWindowStart.value.getDate() + offset)
-  dateWindowStart.value = next
-  searchForm.date = formatDate(next)
-  refreshTrainData()
-}
-
-const resetDateWindow = () => {
-  const today = new Date()
-  dateWindowStart.value = today
-  searchForm.date = formatDate(today)
   refreshTrainData()
 }
 
@@ -759,7 +733,6 @@ const handlePayOrder = async () => {
   try {
     const result = await payOrder(orderNo)
     trainStore.setCurrentOrder(result)
-    ticketCode.value = result.pickupCode || ''
     showPayDialog.value = false
     showTicketDialog.value = true
     clearTimers()
@@ -785,26 +758,6 @@ const handleCancelOrder = async () => {
     ElMessage.error(errorMessage(error, '取消失败，请稍后重试'))
   } finally {
     cancelLoading.value = false
-  }
-}
-
-const handleRefundOrder = async () => {
-  const currentOrder = trainStore.currentOrder
-  if (!currentOrder?.orderNo) return
-  refundLoading.value = true
-  try {
-    const result = await refundTrainOrder(currentOrder.orderNo)
-    ElMessage.success(`${result.refundRule}，退款金额：¥${result.refundAmount}`)
-    showTicketDialog.value = false
-    trainStore.setCurrentOrder({
-      ...currentOrder,
-      status: result.status
-    })
-    await refreshTrainData()
-  } catch (error: unknown) {
-    ElMessage.error(errorMessage(error, '退票失败，请稍后重试'))
-  } finally {
-    refundLoading.value = false
   }
 }
 
@@ -959,12 +912,6 @@ onUnmounted(clearTimers)
   width: 100%;
 }
 
-.date-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .date-strip {
   display: flex;
   gap: 8px;
@@ -1083,19 +1030,6 @@ onUnmounted(clearTimers)
 
 .ticket-code {
   text-align: center;
-}
-
-.code-box {
-  display: inline-block;
-  min-width: 156px;
-  padding: 12px 18px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 6px;
-  background: var(--el-fill-color-light);
-  color: var(--el-color-primary);
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: 4px;
 }
 
 .ticket-actions {

@@ -26,6 +26,9 @@ import java.util.stream.IntStream;
 
 @Service
 public class TrainServiceImpl implements TrainService {
+    private static final String TRAIN_TYPE_HIGH_SPEED = "\u9ad8\u94c1";
+    private static final String TRAIN_TYPE_BULLET = "\u52a8\u8f66";
+    private static final String TRAIN_TYPE_NORMAL = "\u666e\u901f";
     private static final List<String> SEAT_ORDER = List.of("商务座", "一等座", "二等座", "软卧", "硬卧", "硬座");
     private static final Map<String, String> API_SEAT_NAMES = Map.of(
         "business", "商务座",
@@ -376,12 +379,15 @@ public class TrainServiceImpl implements TrainService {
         if (trainTypes == null || trainTypes.isEmpty()) {
             return true;
         }
-        String trainType = String.valueOf(ticket.getExtra().get("train_type"));
-        if (trainTypes.contains(trainType)) {
-            return true;
-        }
-        String trainCodeType = resolveTrainType(ticket.getName());
-        return trainTypes.contains(trainCodeType);
+        String trainNo = firstText(
+            ticket.getExtra() == null ? null : ticket.getExtra().get("train_no"),
+            ticket.getExtra() == null ? null : ticket.getExtra().get("train_code"),
+            ticket.getName()
+        );
+        String actualType = resolveTrainType(trainNo);
+        return trainTypes.stream()
+            .map(this::normalizeTrainType)
+            .anyMatch(actualType::equals);
     }
 
     private boolean ticketMatchesSeatTypes(TrainTicketDTO ticket, List<String> seatTypes) {
@@ -393,8 +399,13 @@ public class TrainServiceImpl implements TrainService {
             return true;
         }
         return transferSegments(ticket).stream()
-            .map(segment -> valueOf(readMap(segment.get("extra")).get("train_type")))
-            .anyMatch(trainTypes::contains);
+            .map(segment -> resolveTrainType(firstText(
+                segment.get("train_no"),
+                readMap(segment.get("extra")).get("train_no"),
+                readMap(segment.get("extra")).get("train_code"),
+                segment.get("name")
+            )))
+            .anyMatch(actualType -> trainTypes.stream().map(this::normalizeTrainType).anyMatch(actualType::equals));
     }
 
     private boolean transferMatchesSeatTypes(TrainTicketDTO ticket, List<String> seatTypes) {
@@ -419,7 +430,7 @@ public class TrainServiceImpl implements TrainService {
 
     private Map<String, Integer> defaultSeatsForTrainType(String trainType) {
         Map<String, Integer> seats = new LinkedHashMap<>();
-        if ("普速".equals(trainType)) {
+        if (TRAIN_TYPE_NORMAL.equals(trainType)) {
             seats.put("硬座", 20);
             seats.put("硬卧", 10);
             seats.put("软卧", 6);
@@ -454,7 +465,7 @@ public class TrainServiceImpl implements TrainService {
 
     private Map<String, Double> defaultPrices(String trainType, Set<String> seats) {
         Map<String, Double> prices = new LinkedHashMap<>();
-        double base = "高铁".equals(trainType) ? 180.0 : "动车".equals(trainType) ? 120.0 : 80.0;
+        double base = TRAIN_TYPE_HIGH_SPEED.equals(trainType) ? 180.0 : TRAIN_TYPE_BULLET.equals(trainType) ? 120.0 : 80.0;
         for (String seat : seats) {
             double multiplier = switch (seat) {
                 case "商务座" -> 3.0;
@@ -485,16 +496,33 @@ public class TrainServiceImpl implements TrainService {
 
     private String resolveTrainType(String trainNo) {
         if (isBlank(trainNo)) {
-            return "普速";
+            return TRAIN_TYPE_NORMAL;
         }
         char first = Character.toUpperCase(trainNo.charAt(0));
         if (first == 'G') {
-            return "高铁";
+            return TRAIN_TYPE_HIGH_SPEED;
         }
         if (first == 'D') {
-            return "动车";
+            return TRAIN_TYPE_BULLET;
         }
-        return "普速";
+        return TRAIN_TYPE_NORMAL;
+    }
+
+    private String normalizeTrainType(String trainType) {
+        if (isBlank(trainType)) {
+            return "";
+        }
+        String text = trainType.trim();
+        if (TRAIN_TYPE_HIGH_SPEED.equals(text) || "G".equalsIgnoreCase(text) || text.toLowerCase().contains("high")) {
+            return TRAIN_TYPE_HIGH_SPEED;
+        }
+        if (TRAIN_TYPE_BULLET.equals(text) || "D".equalsIgnoreCase(text) || text.toLowerCase().contains("bullet")) {
+            return TRAIN_TYPE_BULLET;
+        }
+        if (TRAIN_TYPE_NORMAL.equals(text) || "K".equalsIgnoreCase(text) || "T".equalsIgnoreCase(text) || "Z".equalsIgnoreCase(text)) {
+            return TRAIN_TYPE_NORMAL;
+        }
+        return text;
     }
 
     private int parseSeatCount(Object value) {
