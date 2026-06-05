@@ -464,6 +464,8 @@
 **### POST `/api/itinerary/ai/generate` `【已实现】`**
 
 - 说明：根据目的地、天数、预算和偏好生成结构化行程。AI 配置缺失或调用失败时会返回规则降级行程。
+- AI 调用配置：后端通过环境变量 `AI_API_URL`、`AI_API_KEY`、`AI_MODEL` 调用 DeepSeek/OpenAI 兼容的 Chat Completions 接口；例如 `AI_API_URL=https://api.deepseek.com/chat/completions`，`AI_MODEL=deepseek-v4-flash`。当 `AI_API_KEY` 为空时，后端会复用 `DEEPSEEK_API_KEY`。
+- 前端约束：目的地由省/市/区县级联选择器选择后提交，不再允许任意文本直接生成。
 - 请求体：
 
 ```json
@@ -615,6 +617,7 @@
 **### POST `/api/questions/{id}/answer` `【已实现】`**
 
 - 说明：回答问题。
+- 权限：未回答的问题允许登录用户回答；已有回答仅回答发布者或管理员可修改。
 - 请求体：
 
 ```json
@@ -625,7 +628,18 @@
 
 - 响应 `data`：更新后的 `QuestionDTO`
 
-  
+**### DELETE `/api/questions/{id}` `【已实现】`**
+
+- 说明：删除问题。
+- 权限：仅问题发布者或管理员可删除，其余用户返回 `403`。
+- 响应 `data`：`true` / `false`
+
+**### DELETE `/api/questions/{id}/answer` `【已实现】`**
+
+- 说明：删除问题下的回答，删除后问题状态恢复为待回答。
+- 权限：仅回答发布者或管理员可删除，其余用户返回 `403`。
+- 响应 `data`：`true` / `false`
+
 
 **### GET `/api/reviews/orders/{orderNo}` `【待实现】`**
 
@@ -1012,4 +1026,18 @@ POST `/api/chat/context/{sessionId}/reset` — 重置会话历史（已实现为
 
 **### GET `/api/destinations/{city}/weather` `【待实现】`**
 
-**### POST `/api/upload/image` `【待实现】`**
+**### POST `/api/upload/image` `【已实现】`**
+
+- 说明：通用图片上传接口，当前用于社区游记多图上传。后端会将图片上传到对象存储，并返回可访问 URL。
+- 请求头：`Authorization: Bearer <token>`
+- Content-Type：`multipart/form-data`
+- 表单字段：
+  - `file`：图片文件，后端统一转存为 jpg。
+- 文件命名：游记图片按 `post-{user_id}-{yyyyMMddHHmmss}-{random}.jpg` 写入对象存储；头像上传仍使用 `avatar-{user_id}.jpg`。
+- 响应示例：
+
+```json
+{
+  "url": "https://objectstorage.../post-0000000000000002-20260605211300-a1b2c3d4.jpg"
+}
+```

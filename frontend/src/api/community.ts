@@ -91,3 +91,20 @@ export function createQuestion(data: Question) {
 export function answerQuestion(id: string, answer: string) {
   return http.post<Question>(`/questions/${id}/answer`, { answer })
 }
+
+export function deleteQuestion(id: string) {
+  return http.delete<boolean>(`/questions/${id}`)
+}
+
+export function deleteQuestionAnswer(id: string) {
+  return http.delete<boolean>(`/questions/${id}/answer`)
+}
+
+export function uploadCommunityImage(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post<{ url: string }>('/upload/image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}

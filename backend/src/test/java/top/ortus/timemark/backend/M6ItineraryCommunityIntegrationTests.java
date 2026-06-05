@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,9 @@ class M6ItineraryCommunityIntegrationTests {
     @Autowired
     private JwtTokenService jwtTokenService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private String userToken() {
         return "Bearer " + jwtTokenService.createToken(2L, "普通用户", List.of("USER"));
     }
@@ -39,8 +43,21 @@ class M6ItineraryCommunityIntegrationTests {
         return "Bearer " + jwtTokenService.createToken(99L, "其他用户", List.of("USER"));
     }
 
+    private String secondUserToken() {
+        ensureSecondUser();
+        return "Bearer " + jwtTokenService.createToken(3L, "second-user", List.of("USER"));
+    }
+
     private String adminToken() {
         return "Bearer " + jwtTokenService.createToken(1L, "管理员", List.of("ADMIN"));
+    }
+
+    private void ensureSecondUser() {
+        jdbcTemplate.update("""
+                merge into `user` (id, phone, email, password, nickname, points, level, status, deleted)
+                key(id) values (3, '13900000003', 'second@timemark.com', 'test-password', 'second-user', 0, 1, 0, 0)
+                """);
+        jdbcTemplate.update("merge into user_role (user_id, role_id) key(user_id, role_id) values (3, 2)");
     }
 
     @Test
@@ -115,22 +132,16 @@ class M6ItineraryCommunityIntegrationTests {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.content").value("路线很实用，准备照着走。"));
 
-        mockMvc.perform(post("/api/questions")
-                        .header("Authorization", userToken())
-                        .contentType("application/json")
-                        .content("{\"title\":\"杭州住哪里方便？\",\"content\":\"想兼顾西湖和地铁。\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.id", notNullValue()));
+        String questionId = createQuestionAndReturnId(userToken(), "where to stay in Hangzhou", "near subway and lake");
 
-        mockMvc.perform(post("/api/questions/1/answer")
+        mockMvc.perform(post("/api/questions/" + questionId + "/answer")
                         .header("Authorization", userToken())
                         .contentType("application/json")
-                        .content("{\"answer\":\"可以优先看湖滨或龙翔桥周边。\"}"))
+                        .content("{\"answer\":\"try Hubin or Longxiangqiao first\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value(1))
-                .andExpect(jsonPath("$.data.answer").value("可以优先看湖滨或龙翔桥周边。"));
+                .andExpect(jsonPath("$.data.answer").value("try Hubin or Longxiangqiao first"));
     }
 
     @Test
@@ -178,6 +189,70 @@ class M6ItineraryCommunityIntegrationTests {
                 .andExpect(jsonPath("$.data").value(true));
     }
 
+    @Test
+    void communityPostOwnerShouldDeleteCommentsUnderOwnPost() throws Exception {
+        String postId = createPostAndReturnId(userToken(), "post owner can moderate comments");
+        String commentId = createCommentAndReturnId(secondUserToken(), postId, "comment by second user");
+
+        mockMvc.perform(delete("/api/posts/" + postId + "/comments/" + commentId)
+                        .header("Authorization", otherUserToken()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/posts/" + postId + "/comments/" + commentId)
+                        .header("Authorization", userToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+    }
+
+    @Test
+    void communityShouldLimitQuestionAndAnswerDeleteToOwnerOrAdmin() throws Exception {
+        String questionId = createQuestionAndReturnId(userToken(), "question delete permission", "question content");
+
+        mockMvc.perform(delete("/api/questions/" + questionId)
+                        .header("Authorization", otherUserToken()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/questions/" + questionId)
+                        .header("Authorization", userToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+
+        String adminQuestionId = createQuestionAndReturnId(userToken(), "admin question delete permission", "question content");
+        mockMvc.perform(delete("/api/questions/" + adminQuestionId)
+                        .header("Authorization", adminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+
+        String answeredQuestionId = createQuestionAndReturnId(userToken(), "answer delete permission", "question content");
+        answerQuestion(answeredQuestionId, secondUserToken(), "answer by second user");
+
+        mockMvc.perform(post("/api/questions/" + answeredQuestionId + "/answer")
+                        .header("Authorization", userToken())
+                        .contentType("application/json")
+                        .content("{\"answer\":\"overwrite by question owner\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/questions/" + answeredQuestionId + "/answer")
+                        .header("Authorization", userToken()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/questions/" + answeredQuestionId + "/answer")
+                        .header("Authorization", secondUserToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+
+        answerQuestion(answeredQuestionId, secondUserToken(), "answer by second user again");
+        mockMvc.perform(delete("/api/questions/" + answeredQuestionId + "/answer")
+                        .header("Authorization", adminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+    }
+
     private String createPostAndReturnId(String token, String title) throws Exception {
         String response = mockMvc.perform(post("/api/posts")
                         .header("Authorization", token)
@@ -208,5 +283,27 @@ class M6ItineraryCommunityIntegrationTests {
                 .getResponse()
                 .getContentAsString();
         return JsonPath.read(response, "$.data.id");
+    }
+
+    private String createQuestionAndReturnId(String token, String title, String content) throws Exception {
+        String response = mockMvc.perform(post("/api/questions")
+                        .header("Authorization", token)
+                        .contentType("application/json")
+                        .content("{\"title\":\"%s\",\"content\":\"%s\"}".formatted(title, content)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return JsonPath.read(response, "$.data.id");
+    }
+
+    private void answerQuestion(String questionId, String token, String answer) throws Exception {
+        mockMvc.perform(post("/api/questions/" + questionId + "/answer")
+                        .header("Authorization", token)
+                        .contentType("application/json")
+                        .content("{\"answer\":\"%s\"}".formatted(answer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

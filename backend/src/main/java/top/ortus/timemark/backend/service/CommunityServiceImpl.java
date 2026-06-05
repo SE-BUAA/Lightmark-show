@@ -80,6 +80,7 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public PostDTO createPost(Long userId, PostDTO payload) {
+        ensureUserExists(userId);
         PostDTO post = payload == null ? new PostDTO() : payload;
         validatePost(post);
         GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
@@ -100,6 +101,7 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public PostDTO updatePost(Long userId, Long id, PostDTO payload) {
+        ensureUserExists(userId);
         PostDTO existing = getExistingPost(id);
         ensureOwner(userId, existing.getUser_id(), "只能编辑自己的游记");
         PostDTO post = payload == null ? new PostDTO() : payload;
@@ -129,6 +131,7 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public Map<String, Object> togglePostLike(Long userId, Long id) {
+        ensureUserExists(userId);
         getExistingPost(id);
         Integer liked = jdbcTemplate.queryForObject(
                 "select count(1) from post_like where post_id = ? and user_id = ?",
@@ -179,6 +182,7 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public CommentDTO createPostComment(Long userId, Long postId, CommentDTO payload, String ip) {
+        ensureUserExists(userId);
         getExistingPost(postId);
         CommentDTO comment = payload == null ? new CommentDTO() : payload;
         if (!StringUtils.hasText(comment.getContent())) {
@@ -208,9 +212,11 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public boolean deletePostComment(Long userId, boolean admin, Long postId, Long commentId) {
-        getExistingPost(postId);
+        PostDTO post = getExistingPost(postId);
         CommentDTO comment = getExistingPostComment(postId, commentId);
-        ensureOwnerOrAdmin(userId, admin, comment.getUser_id(), "只能删除自己的评论回复");
+        if (!admin && !String.valueOf(userId).equals(comment.getUser_id()) && !String.valueOf(userId).equals(post.getUser_id())) {
+            throw new ApiException(403, "只能删除自己的评论回复");
+        }
         int affected = jdbcTemplate.update(
                 "update comment set is_approved = 0 where id = ? and target_type = 'POST' and target_id = ? and is_approved = 1",
                 commentId,
@@ -259,6 +265,7 @@ public class CommunityServiceImpl implements CommunityService {
     @Override
     @Transactional
     public QuestionDTO createQuestion(Long userId, QuestionDTO payload) {
+        ensureUserExists(userId);
         QuestionDTO question = payload == null ? new QuestionDTO() : payload;
         if (!StringUtils.hasText(question.getTitle()) || !StringUtils.hasText(question.getContent())) {
             throw new ApiException(400, "问题标题和内容不能为空");
@@ -295,8 +302,17 @@ public class CommunityServiceImpl implements CommunityService {
 
     @Override
     @Transactional
-    public QuestionDTO answerQuestion(Long userId, Long id, Map<String, Object> payload) {
-        getQuestion(id);
+    public QuestionDTO answerQuestion(Long userId, boolean admin, Long id, Map<String, Object> payload) {
+        ensureUserExists(userId);
+        QuestionDTO existing = getQuestion(id);
+        boolean answered = existing.getStatus() == 1
+                || StringUtils.hasText(existing.getAnswer())
+                || StringUtils.hasText(existing.getAnswer_user_id());
+        if (answered
+                && !admin
+                && !String.valueOf(userId).equals(existing.getAnswer_user_id())) {
+            throw new ApiException(403, "只能修改自己的回答");
+        }
         String answer = Objects.toString(payload == null ? "" : payload.get("answer"), "").trim();
         if (!StringUtils.hasText(answer)) {
             throw new ApiException(400, "回答内容不能为空");
@@ -307,6 +323,29 @@ public class CommunityServiceImpl implements CommunityService {
                 where id = ?
                 """, answer, userId, id);
         return getQuestion(id);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteQuestion(Long userId, boolean admin, Long id) {
+        QuestionDTO question = getQuestion(id);
+        ensureOwnerOrAdmin(userId, admin, question.getUser_id(), "只能删除自己的问题");
+        return jdbcTemplate.update("delete from question where id = ?", id) > 0;
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteAnswer(Long userId, boolean admin, Long id) {
+        QuestionDTO question = getQuestion(id);
+        if (!StringUtils.hasText(question.getAnswer()) || !StringUtils.hasText(question.getAnswer_user_id())) {
+            throw new ApiException(404, "回答不存在");
+        }
+        ensureOwnerOrAdmin(userId, admin, question.getAnswer_user_id(), "只能删除自己的回答");
+        return jdbcTemplate.update("""
+                update question
+                set answer = null, answer_user_id = null, status = 0, answer_time = null
+                where id = ?
+                """, id) > 0;
     }
 
     private PostDTO getExistingPost(Long id) {
@@ -428,6 +467,20 @@ public class CommunityServiceImpl implements CommunityService {
     private void ensureOwnerOrAdmin(Long userId, boolean admin, String ownerId, String message) {
         if (!admin && !String.valueOf(userId).equals(ownerId)) {
             throw new ApiException(403, message);
+        }
+    }
+
+    private void ensureUserExists(Long userId) {
+        if (userId == null || userId <= 0) {
+            throw new ApiException(401, "请先登录");
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(1) from `user` where id = ? and deleted = 0",
+                Integer.class,
+                userId
+        );
+        if (count == null || count == 0) {
+            throw new ApiException(401, "登录状态已失效，请重新登录");
         }
     }
 

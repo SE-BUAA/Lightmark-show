@@ -47,6 +47,50 @@ public class AIServiceImpl implements AIService {
     private static final Map<Character, Integer> CHINESE_DIGITS = Map.of(
             '一', 1, '二', 2, '两', 2, '三', 3, '四', 4, '五', 5, '六', 6, '七', 7, '八', 8, '九', 9
     );
+    private static final Map<String, CityTravelKnowledge> CITY_TRAVEL_KNOWLEDGE = Map.of(
+            "杭州", new CityTravelKnowledge(
+                    List.of("西湖", "断桥残雪", "苏堤", "雷峰塔", "灵隐寺", "法喜寺", "西溪湿地", "京杭大运河"),
+                    List.of("浙江省博物馆", "中国茶叶博物馆", "南宋官窑博物馆", "杭州工艺美术博物馆"),
+                    List.of("河坊街", "南宋御街", "湖滨步行街", "小河直街", "武林夜市"),
+                    List.of("片儿川", "葱包桧", "定胜糕", "东坡肉", "西湖醋鱼", "龙井虾仁", "知味小笼", "猫耳朵"),
+                    List.of("西湖龙井茶", "藕粉", "丝绸围巾", "王星记扇子")
+            ),
+            "成都", new CityTravelKnowledge(
+                    List.of("宽窄巷子", "锦里", "武侯祠", "杜甫草堂", "人民公园", "青羊宫", "熊猫基地"),
+                    List.of("成都博物馆", "四川博物院", "金沙遗址博物馆"),
+                    List.of("春熙路", "太古里", "建设巷", "玉林路"),
+                    List.of("担担面", "钟水饺", "龙抄手", "甜水面", "钵钵鸡", "兔头", "火锅", "串串香"),
+                    List.of("火锅底料", "蜀锦", "熊猫文创", "郫县豆瓣")
+            ),
+            "北京", new CityTravelKnowledge(
+                    List.of("故宫", "天安门广场", "景山公园", "颐和园", "天坛", "什刹海", "八达岭长城"),
+                    List.of("国家博物馆", "首都博物馆", "中国美术馆"),
+                    List.of("南锣鼓巷", "前门大街", "王府井", "五道营胡同"),
+                    List.of("北京烤鸭", "炸酱面", "卤煮", "豆汁焦圈", "驴打滚", "豌豆黄", "涮羊肉"),
+                    List.of("稻香村点心", "景泰蓝文创", "故宫文创", "北京果脯")
+            ),
+            "上海", new CityTravelKnowledge(
+                    List.of("外滩", "陆家嘴", "豫园", "南京路步行街", "武康路", "田子坊", "朱家角"),
+                    List.of("上海博物馆", "上海历史博物馆", "中华艺术宫"),
+                    List.of("新天地", "淮海路", "城隍庙", "愚园路"),
+                    List.of("生煎包", "小笼包", "葱油拌面", "排骨年糕", "本帮红烧肉", "蟹粉面"),
+                    List.of("蝴蝶酥", "梨膏糖", "大白兔奶糖", "上海文创")
+            ),
+            "西安", new CityTravelKnowledge(
+                    List.of("秦始皇兵马俑", "西安城墙", "大雁塔", "钟鼓楼", "华清宫", "大唐不夜城"),
+                    List.of("陕西历史博物馆", "西安博物院", "碑林博物馆"),
+                    List.of("回民街", "永兴坊", "书院门", "小南门早市"),
+                    List.of("肉夹馍", "羊肉泡馍", "凉皮", "biangbiang面", "葫芦鸡", "甑糕", "胡辣汤"),
+                    List.of("秦俑文创", "石榴", "陕北剪纸", "黄桂稠酒")
+            ),
+            "三亚", new CityTravelKnowledge(
+                    List.of("亚龙湾", "蜈支洲岛", "天涯海角", "鹿回头", "南山文化旅游区", "椰梦长廊"),
+                    List.of("三亚千古情", "海南省民族博物馆"),
+                    List.of("第一市场", "解放路步行街", "后海村", "海棠湾"),
+                    List.of("清补凉", "椰子鸡", "海南粉", "抱罗粉", "文昌鸡", "和乐蟹", "陵水酸粉"),
+                    List.of("椰子制品", "黄灯笼辣椒酱", "热带水果干", "珍珠饰品")
+            )
+    );
 
     private final HotelService hotelService;
     private final JdbcTemplate jdbcTemplate;
@@ -459,32 +503,109 @@ public class AIServiceImpl implements AIService {
     }
 
     private String fallbackPlanData(String destination, int days, String preferences, String budget) {
+        CityTravelKnowledge knowledge = travelKnowledge(destination);
         List<Map<String, Object>> data = new ArrayList<>();
         for (int i = 1; i <= days; i++) {
             String theme = i == 1 ? "抵达与初见" : (i == days ? "收尾与返程" : "深度体验");
             List<String> items = new ArrayList<>();
+            List<String> classicPlaces = new ArrayList<>();
+            List<String> museums = new ArrayList<>();
+            List<String> foods = new ArrayList<>();
+            List<String> souvenirs = new ArrayList<>();
             if (i == 1) {
-                items.add("抵达" + destination + "并办理入住");
-                items.add("安排轻松市区散步，熟悉交通和周边");
-                items.add("晚餐选择当地代表性美食");
+                List<String> places = pick(knowledge.classicPlaces(), 0, 2);
+                List<String> streets = pick(knowledge.streets(), 0, 2);
+                List<String> dayFoods = pick(knowledge.foods(), 0, 3);
+                items.add("上午/中午抵达" + destination + "并办理入住，优先选择靠近" + firstOrFallback(places, "主要景区") + "或地铁站的住宿");
+                items.add("下午从" + join(places) + "开始轻量游览，控制步行强度，预留拍照和休息时间");
+                items.add("晚上去" + firstOrFallback(streets, "热门街区") + "附近用餐，重点尝试" + join(dayFoods));
+                classicPlaces.addAll(places);
+                classicPlaces.addAll(streets);
+                foods.addAll(dayFoods);
             } else if (i == days) {
-                items.add("上午补充一个轻量景点或当地市场");
-                items.add("整理行李并预留前往车站/机场时间");
-                items.add("返程前购买伴手礼");
+                List<String> places = pick(knowledge.classicPlaces(), Math.max(0, i + 1), 1);
+                List<String> streets = pick(knowledge.streets(), 1, 1);
+                List<String> dayFoods = pick(knowledge.foods(), Math.max(0, knowledge.foods().size() - 3), 3);
+                List<String> daySouvenirs = pick(knowledge.souvenirs(), 0, 3);
+                items.add("上午补充游览" + firstOrFallback(places, firstOrFallback(streets, "当地街区")) + "，安排轻量路线，避免返程日过满");
+                items.add("中午选择" + join(dayFoods) + "等方便控制时间的本地餐食");
+                items.add("下午整理行李并预留前往车站/机场时间，返程前购买" + join(daySouvenirs));
+                classicPlaces.addAll(places);
+                classicPlaces.addAll(streets);
+                foods.addAll(dayFoods);
+                souvenirs.addAll(daySouvenirs);
             } else {
-                items.add("上午游览" + destination + "经典景点");
-                items.add("下午安排文化街区、博物馆或自然景观");
-                items.add("晚上体验夜市、商圈或特色餐厅");
+                List<String> places = pick(knowledge.classicPlaces(), i, 2);
+                List<String> dayMuseums = pick(knowledge.museums(), i - 2, 1);
+                List<String> streets = pick(knowledge.streets(), i, 1);
+                List<String> dayFoods = pick(knowledge.foods(), i * 2, 3);
+                items.add("上午游览" + join(places) + "，热门景点建议提前预约门票或错峰进入");
+                items.add("下午安排" + firstOrFallback(dayMuseums, "当地博物馆") + "，之后转去" + firstOrFallback(streets, "文化街区") + "散步休息");
+                items.add("晚上体验" + join(dayFoods) + "，如体力允许可补充夜景或商圈路线");
+                classicPlaces.addAll(places);
+                classicPlaces.addAll(streets);
+                museums.addAll(dayMuseums);
+                foods.addAll(dayFoods);
             }
             String tip = "注意根据实时天气调整；" + (StringUtils.hasText(preferences) ? "已结合偏好：" + preferences + "；" : "")
                     + (StringUtils.hasText(budget) ? "预算参考：" + budget : "费用按现场价格为准");
-            data.add(Map.of("day", i, "theme", theme, "items", items, "tips", tip));
+            Map<String, Object> day = new LinkedHashMap<>();
+            day.put("day", i);
+            day.put("theme", theme);
+            day.put("items", items);
+            putIfNotEmpty(day, "classicPlaces", classicPlaces);
+            putIfNotEmpty(day, "museums", museums);
+            putIfNotEmpty(day, "foods", foods);
+            putIfNotEmpty(day, "souvenirs", souvenirs);
+            day.put("tips", tip);
+            day.put("notes", "");
+            data.add(day);
         }
         try {
             return objectMapper.writeValueAsString(data);
         } catch (Exception ex) {
             return "[]";
         }
+    }
+
+    private void putIfNotEmpty(Map<String, Object> target, String key, List<String> value) {
+        if (value != null && !value.isEmpty()) {
+            target.put(key, value);
+        }
+    }
+
+    private CityTravelKnowledge travelKnowledge(String destination) {
+        String safeDestination = destination == null ? "" : destination;
+        return CITY_TRAVEL_KNOWLEDGE.entrySet().stream()
+                .filter(entry -> safeDestination.contains(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElseGet(() -> new CityTravelKnowledge(
+                        List.of(safeDestination + "热门景区", safeDestination + "历史街区", safeDestination + "城市公园"),
+                        List.of(safeDestination + "博物馆"),
+                        List.of(safeDestination + "老街", safeDestination + "商业街"),
+                        List.of(safeDestination + "特色面点", safeDestination + "本地家常菜", safeDestination + "季节小吃"),
+                        List.of(safeDestination + "文创礼品", safeDestination + "地方特产")
+                ));
+    }
+
+    private List<String> pick(List<String> values, int start, int count) {
+        if (values == null || values.isEmpty() || count <= 0) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            result.add(values.get(Math.floorMod(start + i, values.size())));
+        }
+        return result.stream().distinct().toList();
+    }
+
+    private String firstOrFallback(List<String> values, String fallback) {
+        return values == null || values.isEmpty() ? fallback : values.get(0);
+    }
+
+    private String join(List<String> values) {
+        return values == null || values.isEmpty() ? "当地特色体验" : String.join("、", values);
     }
 
     private String textFrom(Map<String, Object> payload, String... keys) {
@@ -677,5 +798,14 @@ public class AIServiceImpl implements AIService {
         }
         String normalized = value.replaceAll("\\s+", " ");
         return normalized.length() <= 180 ? normalized : normalized.substring(0, 180) + "...";
+    }
+
+    private record CityTravelKnowledge(
+            List<String> classicPlaces,
+            List<String> museums,
+            List<String> streets,
+            List<String> foods,
+            List<String> souvenirs
+    ) {
     }
 }

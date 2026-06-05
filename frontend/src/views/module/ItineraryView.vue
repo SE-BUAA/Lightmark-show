@@ -17,7 +17,15 @@
           <h2>生成行程</h2>
           <el-form label-position="top">
             <el-form-item label="目的地">
-              <el-input v-model="form.destination" placeholder="例如：杭州" />
+              <el-cascader
+                v-model="destinationPath"
+                :options="chinaAdministrativeAreas"
+                :props="destinationCascaderProps"
+                placeholder="请选择省 / 市 / 区县"
+                filterable
+                clearable
+                @change="syncDestination"
+              />
             </el-form-item>
             <div class="form-row">
               <el-form-item label="天数">
@@ -54,11 +62,33 @@
             <div v-for="day in parsedPlan" :key="day.day" class="day-card">
               <div class="day-index">D{{ day.day }}</div>
               <div class="day-content">
-                <h3>{{ day.theme }}</h3>
+                <div class="day-title-row">
+                  <h3>{{ day.theme }}</h3>
+                  <el-button size="small" text type="primary" @click="openDayNoteDialog(day)">批注修改</el-button>
+                </div>
                 <ul>
                   <li v-for="item in day.items" :key="item">{{ item }}</li>
                 </ul>
+                <div class="detail-groups">
+                  <div v-if="day.classicPlaces.length" class="detail-group">
+                    <strong>经典地点</strong>
+                    <span>{{ day.classicPlaces.join('、') }}</span>
+                  </div>
+                  <div v-if="day.museums.length" class="detail-group">
+                    <strong>博物馆/展馆</strong>
+                    <span>{{ day.museums.join('、') }}</span>
+                  </div>
+                  <div v-if="day.foods.length" class="detail-group">
+                    <strong>特色美食</strong>
+                    <span>{{ day.foods.join('、') }}</span>
+                  </div>
+                  <div v-if="day.souvenirs.length" class="detail-group">
+                    <strong>礼品伴手礼</strong>
+                    <span>{{ day.souvenirs.join('、') }}</span>
+                  </div>
+                </div>
                 <p v-if="day.tips">{{ day.tips }}</p>
+                <p v-if="day.notes" class="day-notes">批注：{{ day.notes }}</p>
               </div>
             </div>
           </div>
@@ -122,12 +152,50 @@
         <el-button type="primary" :loading="saving" @click="handleEditSubmit">保存修改</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showDayNoteDialog" title="批注修改每日安排" width="680px">
+      <el-form label-position="top">
+        <el-form-item label="每日主题">
+          <el-input v-model="dayEditForm.theme" />
+        </el-form-item>
+        <el-form-item label="具体安排">
+          <el-input v-model="dayEditForm.itemsText" type="textarea" :rows="5" placeholder="每行一条安排" />
+        </el-form-item>
+        <div class="form-row edit-date-row">
+          <el-form-item label="经典地点">
+            <el-input v-model="dayEditForm.classicPlacesText" type="textarea" :rows="3" placeholder="每行一个地点" />
+          </el-form-item>
+          <el-form-item label="博物馆/展馆">
+            <el-input v-model="dayEditForm.museumsText" type="textarea" :rows="3" placeholder="每行一个场馆" />
+          </el-form-item>
+        </div>
+        <div class="form-row edit-date-row">
+          <el-form-item label="特色美食">
+            <el-input v-model="dayEditForm.foodsText" type="textarea" :rows="3" placeholder="每行一种美食" />
+          </el-form-item>
+          <el-form-item label="礼品伴手礼">
+            <el-input v-model="dayEditForm.souvenirsText" type="textarea" :rows="3" placeholder="每行一个礼品" />
+          </el-form-item>
+        </div>
+        <el-form-item label="提醒">
+          <el-input v-model="dayEditForm.tips" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="我的批注">
+          <el-input v-model="dayEditForm.notes" type="textarea" :rows="4" placeholder="例如：这天想少走路、午餐换成某家店、博物馆需要提前预约" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showDayNoteDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleDayNoteSubmit">保存到预览</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { chinaAdministrativeAreas } from '@/data/chinaAdministrativeAreas'
 import {
   createPlan,
   deletePlan,
@@ -143,16 +211,28 @@ interface PlanDay {
   day: number
   theme: string
   items: string[]
+  classicPlaces: string[]
+  museums: string[]
+  foods: string[]
+  souvenirs: string[]
   tips?: string
+  notes?: string
 }
 
 const form = reactive({
-  destination: '杭州',
+  destination: '浙江杭州',
   days: 3,
   startDate: '',
   budget: '人均 3000 元',
   preferences: '慢节奏、美食、城市漫步'
 })
+
+const destinationPath = ref<string[]>(['浙江', '杭州'])
+const destinationCascaderProps = {
+  checkStrictly: true,
+  emitPath: true,
+  expandTrigger: 'hover' as const
+}
 
 const plans = ref<TravelPlan[]>([])
 const currentPlan = ref<TravelPlan | null>(null)
@@ -160,6 +240,8 @@ const loadingPlans = ref(false)
 const generating = ref(false)
 const saving = ref(false)
 const showEditDialog = ref(false)
+const showDayNoteDialog = ref(false)
+const editingDayIndex = ref(-1)
 
 const editForm = reactive<TravelPlan>({
   title: '',
@@ -168,6 +250,17 @@ const editForm = reactive<TravelPlan>({
   end_date: '',
   plan_data: '[]',
   is_public: 0
+})
+
+const dayEditForm = reactive({
+  theme: '',
+  itemsText: '',
+  classicPlacesText: '',
+  museumsText: '',
+  foodsText: '',
+  souvenirsText: '',
+  tips: '',
+  notes: ''
 })
 
 const isPublic = computed({
@@ -185,14 +278,36 @@ const parsedPlan = computed<PlanDay[]>(() => {
       ? parsed.map((item, index) => ({
           day: Number(item.day || index + 1),
           theme: String(item.theme || `第 ${index + 1} 天`),
-          items: Array.isArray(item.items) ? item.items.map(String) : [],
-          tips: item.tips ? String(item.tips) : ''
+          items: toStringList(item.items),
+          classicPlaces: toStringList(item.classicPlaces || item.classic_places || item.places),
+          museums: toStringList(item.museums || item.exhibitions),
+          foods: toStringList(item.foods || item.food),
+          souvenirs: toStringList(item.souvenirs || item.gifts),
+          tips: item.tips ? String(item.tips) : '',
+          notes: item.notes ? String(item.notes) : ''
         }))
       : []
   } catch {
     return []
   }
 })
+
+const toStringList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map(String).map(item => item.trim()).filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value.split(/[;\n,，、]/).map(item => item.trim()).filter(Boolean)
+  }
+  return []
+}
+
+const textToList = (value: string): string[] =>
+  value.split('\n').map(item => item.trim()).filter(Boolean)
+
+const assignIfNotEmpty = (target: Record<string, unknown>, key: string, value: string[]) => {
+  if (value.length) target[key] = value
+}
 
 const loadPlans = async () => {
   loadingPlans.value = true
@@ -206,8 +321,9 @@ const loadPlans = async () => {
 }
 
 const handleGenerate = async () => {
-  if (!form.destination.trim()) {
-    ElMessage.warning('请先填写目的地')
+  syncDestination()
+  if (!destinationPath.value.length || !form.destination.trim()) {
+    ElMessage.warning('请先选择目的地')
     return
   }
   generating.value = true
@@ -255,6 +371,43 @@ const openEditDialog = () => {
   showEditDialog.value = true
 }
 
+const openDayNoteDialog = (day: PlanDay) => {
+  editingDayIndex.value = parsedPlan.value.findIndex(item => item.day === day.day)
+  Object.assign(dayEditForm, {
+    theme: day.theme,
+    itemsText: day.items.join('\n'),
+    classicPlacesText: day.classicPlaces.join('\n'),
+    museumsText: day.museums.join('\n'),
+    foodsText: day.foods.join('\n'),
+    souvenirsText: day.souvenirs.join('\n'),
+    tips: day.tips || '',
+    notes: day.notes || ''
+  })
+  showDayNoteDialog.value = true
+}
+
+const handleDayNoteSubmit = () => {
+  if (!currentPlan.value || editingDayIndex.value < 0) return
+  const nextPlan = parsedPlan.value.map((day, index) => {
+    if (index !== editingDayIndex.value) return day
+    const nextDay: Record<string, unknown> = {
+      day: day.day,
+      theme: dayEditForm.theme.trim() || day.theme,
+      items: textToList(dayEditForm.itemsText),
+      tips: dayEditForm.tips.trim(),
+      notes: dayEditForm.notes.trim()
+    }
+    assignIfNotEmpty(nextDay, 'classicPlaces', textToList(dayEditForm.classicPlacesText))
+    assignIfNotEmpty(nextDay, 'museums', textToList(dayEditForm.museumsText))
+    assignIfNotEmpty(nextDay, 'foods', textToList(dayEditForm.foodsText))
+    assignIfNotEmpty(nextDay, 'souvenirs', textToList(dayEditForm.souvenirsText))
+    return nextDay
+  })
+  currentPlan.value.plan_data = JSON.stringify(nextPlan)
+  showDayNoteDialog.value = false
+  ElMessage.success('批注已写入当前行程预览，保存后会同步到我的行程')
+}
+
 const handleEditSubmit = async () => {
   if (!editForm.title.trim() || !editForm.destination.trim()) {
     ElMessage.warning('请填写标题和目的地')
@@ -299,6 +452,10 @@ const handleDelete = async () => {
   currentPlan.value = null
   await loadPlans()
   ElMessage.success('已删除')
+}
+
+const syncDestination = () => {
+  form.destination = destinationPath.value.join('')
 }
 
 onMounted(loadPlans)
@@ -352,6 +509,9 @@ onMounted(loadPlans)
 .form-row :deep(.el-date-editor.el-input) {
   width: 100%;
 }
+.planner-panel :deep(.el-cascader) {
+  width: 100%;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -391,6 +551,12 @@ onMounted(loadPlans)
   height: 42px;
   justify-content: center;
 }
+.day-title-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
 .day-content h3 {
   font-size: 17px;
   margin-bottom: 8px;
@@ -404,6 +570,38 @@ onMounted(loadPlans)
 .day-content p {
   color: var(--text-secondary);
   margin-top: 8px;
+}
+.detail-groups {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 12px;
+}
+.detail-group {
+  background: var(--cream-100);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.detail-group strong,
+.detail-group span {
+  display: block;
+}
+.detail-group strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.detail-group span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.day-notes {
+  background: #fff8e6;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
 }
 .plans-panel {
   grid-column: 1 / -1;

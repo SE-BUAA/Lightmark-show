@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import top.ortus.timemark.backend.dto.AiDTO;
 import top.ortus.timemark.backend.dto.chat.ChatContextDTO;
@@ -39,7 +40,7 @@ public class DeepSeekNativeChatService {
     private final UpdateEmailTool updateEmailTool;
     private final WebSearchTool webSearchTool;
 
-    private final String baseUrl;
+    private final String apiUrl;
     private final String apiKey;
     private final String model;
 
@@ -50,15 +51,16 @@ public class DeepSeekNativeChatService {
                                      UpdateNicknameTool updateNicknameTool,
                                      UpdateEmailTool updateEmailTool,
                                      WebSearchTool webSearchTool,
-                                     @Value("${spring.ai.deepseek.base-url}") String baseUrl,
-                                     @Value("${spring.ai.deepseek.api-key}") String apiKey,
-                                     @Value("${spring.ai.deepseek.chat.options.model}") String model) {
+                                     @Value("${timemark.ai.api-url:https://api.deepseek.com/chat/completions}") String apiUrl,
+                                     @Value("${timemark.ai.api-key:}") String apiKey,
+                                     @Value("${DEEPSEEK_API_KEY:}") String deepSeekApiKey,
+                                     @Value("${timemark.ai.model:deepseek-v4-flash}") String model) {
         this.objectMapper = objectMapper;
         this.updateNicknameTool = updateNicknameTool;
         this.updateEmailTool = updateEmailTool;
         this.webSearchTool = webSearchTool;
-        this.baseUrl = baseUrl;
-        this.apiKey = apiKey;
+        this.apiUrl = normalizeChatCompletionsUrl(apiUrl);
+        this.apiKey = StringUtils.hasText(apiKey) ? apiKey : deepSeekApiKey;
         this.model = model;
         this.httpClient = HttpClient.newBuilder().build();
     }
@@ -202,9 +204,12 @@ public class DeepSeekNativeChatService {
     }
 
     private JsonNode callDeepSeek(Map<String, Object> requestBody) {
+        if (!StringUtils.hasText(apiUrl) || !StringUtils.hasText(apiKey)) {
+            throw new IllegalStateException("deepseek_config_missing");
+        }
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(normalizeBaseUrl(baseUrl) + "/chat/completions"))
+                    .uri(URI.create(apiUrl))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(toJson(requestBody), StandardCharsets.UTF_8))
@@ -295,11 +300,18 @@ public class DeepSeekNativeChatService {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private String normalizeBaseUrl(String url) {
-        if (url.endsWith("/")) {
-            return url.substring(0, url.length() - 1);
+    private String normalizeChatCompletionsUrl(String url) {
+        if (!StringUtils.hasText(url)) {
+            return "";
         }
-        return url;
+        String normalized = url.trim();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (normalized.endsWith("/chat/completions")) {
+            return normalized;
+        }
+        return normalized + "/chat/completions";
     }
 
     private String toJson(Object value) {

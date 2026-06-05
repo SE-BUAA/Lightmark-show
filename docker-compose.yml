@@ -19,6 +19,14 @@ services:
 
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_API_URL: ${AI_API_URL:-https://api.deepseek.com/chat/completions}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-deepseek-v4-flash}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://newapi.stuhelper.com/v1}
+      LIGHTMARK_AI_API_URL: ${LIGHTMARK_AI_API_URL:-${AI_API_URL:-https://api.deepseek.com/chat/completions}}
+      LIGHTMARK_AI_API_KEY: ${LIGHTMARK_AI_API_KEY:-${AI_API_KEY:-}}
+      LIGHTMARK_AI_MODEL: ${LIGHTMARK_AI_MODEL:-${AI_MODEL:-deepseek-v4-flash}}
+      LIGHTMARK_DEEPSEEK_BASE_URL: ${LIGHTMARK_DEEPSEEK_BASE_URL:-${DEEPSEEK_BASE_URL:-https://newapi.stuhelper.com/v1}}
     expose:
       - "8080"
     restart: unless-stopped

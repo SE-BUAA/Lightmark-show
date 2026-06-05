@@ -33,5 +33,9 @@ public interface CommunityService {
 
     QuestionDTO getQuestion(Long id);
 
-    QuestionDTO answerQuestion(Long userId, Long id, Map<String, Object> payload);
+    QuestionDTO answerQuestion(Long userId, boolean admin, Long id, Map<String, Object> payload);
+
+    boolean deleteQuestion(Long userId, boolean admin, Long id);
+
+    boolean deleteAnswer(Long userId, boolean admin, Long id);
 }
