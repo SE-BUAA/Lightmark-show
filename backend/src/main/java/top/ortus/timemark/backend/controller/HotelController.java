@@ -45,6 +45,14 @@ public class HotelController {
         return ApiResponse.ok(hotelService.searchHotels(userId, query));
     }
 
+    @GetMapping("/{hotelId}")
+    public ApiResponse<HotelVO> getHotel(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable Long hotelId) {
+        resolveUserId(authorization);
+        return ApiResponse.ok(hotelService.getHotel(hotelId));
+    }
+
     @GetMapping("/room/{roomId}")
     public ApiResponse<RoomDetailVO> getRoomDetail(
             @RequestHeader(value = "Authorization", required = false) String authorization,

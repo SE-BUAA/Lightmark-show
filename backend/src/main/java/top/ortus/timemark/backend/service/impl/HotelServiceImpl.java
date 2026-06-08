@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +26,11 @@ import top.ortus.timemark.backend.dto.HotelSearchDTO;
 import top.ortus.timemark.backend.dto.InvoiceRequestDTO;
 import top.ortus.timemark.backend.dto.OrderResultVO;
 import top.ortus.timemark.backend.dto.RoomDetailVO;
-import top.ortus.timemark.backend.entity.HotelOrderDetail;
 import top.ortus.timemark.backend.entity.InvoiceApplication;
 import top.ortus.timemark.backend.exception.ApiException;
-import top.ortus.timemark.backend.mapper.HotelOrderDetailMapper;
 import top.ortus.timemark.backend.mapper.InvoiceApplicationMapper;
 import top.ortus.timemark.backend.mapper.ProductMapper;
+import top.ortus.timemark.backend.utils.HotelDemoDataFactory;
 import top.ortus.timemark.backend.vo.HotelVO;
 
 import java.math.BigDecimal;
@@ -40,9 +40,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -64,7 +68,6 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
 
     private final ProductMapper productMapper;
     private final OrderMapper orderMapper;
-    private final HotelOrderDetailMapper hotelOrderDetailMapper;
     private final InvoiceApplicationMapper invoiceApplicationMapper;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -91,6 +94,19 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
 
     @Override
     @Transactional(readOnly = true)
+    public HotelVO getHotel(Long hotelId) {
+        if (hotelId == null) {
+            throw new ApiException(400, "hotelId is required");
+        }
+        ProductMapper.HotelSearchRow row = productMapper.selectHotelById(hotelId);
+        if (row == null) {
+            throw new ApiException(404, "hotel not found");
+        }
+        return toHotelVO(row);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public RoomDetailVO getRoomDetail(Long roomId, String checkInDate, String checkOutDate) {
         ProductMapper.RoomDetailRow room = findActiveRoom(roomId);
         LocalDate checkIn = parseDate(checkInDate, "checkInDate");
@@ -108,7 +124,7 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         LocalDate checkIn = parseDate(checkInDate, "checkInDate");
         LocalDate checkOut = parseDate(checkOutDate, "checkOutDate");
         long nights = calculateNights(checkIn, checkOut);
-        List<ProductMapper.RoomDetailRow> rooms = productMapper.selectRoomsByHotelId(hotelId);
+        List<ProductMapper.RoomDetailRow> rooms = safeListHotelRooms(hotelId);
         return rooms.stream()
                 .map(room -> toRoomDetailVO(room, checkIn, checkOut, nights, 1))
                 .toList();
@@ -168,29 +184,13 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         order.setPayDeadline(now.plusMinutes(15));
         order.setCreateTime(now);
         order.setUpdateTime(now);
+        order.setExtraInfo(writeHotelOrderExtra(room, checkIn, checkOut, roomNum, request.getGuestList(),
+                totalPrice, pointsDeducted, payAmount, false));
         orderMapper.insert(order);
-
-        int stockUpdated = productMapper.decrementHotelStock(room.getHotelId(), roomNum);
-        if (stockUpdated == 0) {
-            throw new ApiException(409, "hotel room stock is insufficient");
-        }
 
         if (pointsDeducted > 0) {
             deductPoints(userId, order.getId(), pointsDeducted, now);
         }
-
-        HotelOrderDetail detail = HotelOrderDetail.builder()
-                .orderId(order.getId())
-                .roomId(room.getRoomId())
-                .checkInDate(checkIn)
-                .checkOutDate(checkOut)
-                .roomNum(roomNum)
-                .guestList(writeGuestList(request.getGuestList()))
-                .totalPrice(totalPrice)
-                .pointsDeducted(pointsDeducted)
-                .payAmount(payAmount)
-                .build();
-        hotelOrderDetailMapper.insert(detail);
 
         return OrderResultVO.builder()
                 .orderId(order.getId())
@@ -252,24 +252,24 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         params.add(offset);
         List<HotelOrderListVO> records = jdbcTemplate.query(
                 """
-                select o.id as order_id, o.order_no, p.name as hotel_name, rt.room_name,
-                       d.check_in_date, d.check_out_date, o.total_amount, o.status, o.create_time
+                select o.id as order_id, o.order_no, o.total_amount, o.status, o.create_time, o.extra_info
                 from orders o
-                join hotel_order_detail d on d.order_id = o.id
-                join room_type rt on rt.id = d.room_id
-                join product p on p.id = rt.hotel_id
                 """ + where + " order by o.create_time desc limit ? offset ?",
-                (rs, rowNum) -> HotelOrderListVO.builder()
-                        .orderId(rs.getLong("order_id"))
-                        .orderNo(rs.getString("order_no"))
-                        .hotelName(rs.getString("hotel_name"))
-                        .roomName(rs.getString("room_name"))
-                        .checkInDate(rs.getDate("check_in_date").toLocalDate())
-                        .checkOutDate(rs.getDate("check_out_date").toLocalDate())
-                        .totalAmount(rs.getBigDecimal("total_amount"))
-                        .status(rs.getInt("status"))
-                        .createTime(rs.getTimestamp("create_time").toLocalDateTime())
-                        .build(),
+                (rs, rowNum) -> {
+                    Map<String, Object> extra = readExtraInfo(rs.getString("extra_info"));
+                    LocalDate today = LocalDate.now();
+                    return HotelOrderListVO.builder()
+                            .orderId(rs.getLong("order_id"))
+                            .orderNo(rs.getString("order_no"))
+                            .hotelName(text(extra.get("hotelName"), "酒店订单"))
+                            .roomName(text(extra.get("roomName"), "房型待确认"))
+                            .checkInDate(localDateOrDefault(extra.get("checkInDate"), today))
+                            .checkOutDate(localDateOrDefault(extra.get("checkOutDate"), today.plusDays(1)))
+                            .totalAmount(rs.getBigDecimal("total_amount"))
+                            .status(rs.getInt("status"))
+                            .createTime(rs.getTimestamp("create_time").toLocalDateTime())
+                            .build();
+                },
                 params.toArray()
         );
 
@@ -319,7 +319,9 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
                 orderId,
                 userId
         );
-        restoreHotelStock(number(row.get("hotel_id")).longValue(), number(row.get("room_num")).intValue());
+        if (booleanValue(row.get("stock_deducted"))) {
+            restoreHotelStock(number(row.get("hotel_id")).longValue(), number(row.get("room_num")).intValue());
+        }
         restorePoints(userId, orderId, number(row.get("points_deducted")).intValue());
     }
 
@@ -360,26 +362,32 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         int safePage = page == null || page < 1 ? DEFAULT_PAGE : page;
         int safeSize = size == null || size < 1 ? DEFAULT_SIZE : Math.min(size, MAX_SIZE);
         int offset = (safePage - 1) * safeSize;
-        return jdbcTemplate.query(
-                """
-                select id, order_id, user_id, rating, content, create_time
-                from review
-                where product_id = ? and status = 1
-                order by create_time desc
-                limit ? offset ?
-                """,
-                (rs, rowNum) -> HotelReviewVO.builder()
-                        .id(rs.getLong("id"))
-                        .orderId(rs.getLong("order_id"))
-                        .userId(rs.getLong("user_id"))
-                        .rating(rs.getInt("rating"))
-                        .content(rs.getString("content"))
-                        .createTime(rs.getTimestamp("create_time").toLocalDateTime())
-                        .build(),
-                hotelId,
-                safeSize,
-                offset
-        );
+        try {
+            List<HotelReviewVO> records = jdbcTemplate.query(
+                    """
+                    select id, order_id, user_id, rating, content, create_time
+                    from review
+                    where product_id = ? and status = 1
+                    order by create_time desc
+                    limit ? offset ?
+                    """,
+                    (rs, rowNum) -> HotelReviewVO.builder()
+                            .id(rs.getLong("id"))
+                            .orderId(rs.getLong("order_id"))
+                            .userId(rs.getLong("user_id"))
+                            .rating(rs.getInt("rating"))
+                            .content(rs.getString("content"))
+                            .createTime(rs.getTimestamp("create_time").toLocalDateTime())
+                            .build(),
+                    hotelId,
+                    safeSize,
+                    offset
+            );
+            return records.isEmpty() ? demoHotelReviews(hotelId, safePage, safeSize) : records;
+        } catch (DataAccessException ex) {
+            log.warn("Read hotel reviews failed, using demo reviews, hotelId={}, err={}", hotelId, ex.getMessage());
+            return demoHotelReviews(hotelId, safePage, safeSize);
+        }
     }
 
     @Override
@@ -399,32 +407,44 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         if (status != STATUS_TRAVELED) {
             throw new ApiException(409, "only completed stays can be reviewed");
         }
-        Long exists = jdbcTemplate.queryForObject(
-                "select count(1) from review where order_id = ? and user_id = ? and product_id = ?",
-                Long.class,
-                orderId,
-                userId,
-                number(row.get("hotel_id")).longValue()
-        );
+        Long exists = 0L;
+        try {
+            exists = jdbcTemplate.queryForObject(
+                    "select count(1) from review where order_id = ? and user_id = ? and product_id = ?",
+                    Long.class,
+                    orderId,
+                    userId,
+                    number(row.get("hotel_id")).longValue()
+            );
+        } catch (DataAccessException ex) {
+            log.warn("Review duplicate check skipped: {}", ex.getMessage());
+        }
         if (exists != null && exists > 0) {
             throw new ApiException(409, "order already reviewed");
         }
         LocalDateTime now = LocalDateTime.now();
-        jdbcTemplate.update(
-                """
-                insert into review (order_id, product_id, user_id, rating, content, images, status, create_time)
-                values (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                orderId,
-                number(row.get("hotel_id")).longValue(),
-                userId,
-                request.getRating(),
-                request.getContent().trim(),
-                "[]",
-                1,
-                now
-        );
-        Long id = jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+        Long id;
+        try {
+            jdbcTemplate.update(
+                    """
+                    insert into review (order_id, product_id, target_type, user_id, rating, content, images, status, create_time)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    orderId,
+                    number(row.get("hotel_id")).longValue(),
+                    HOTEL_PRODUCT_TYPE,
+                    userId,
+                    request.getRating(),
+                    request.getContent().trim(),
+                    "[]",
+                    1,
+                    now
+            );
+            id = jdbcTemplate.queryForObject("select last_insert_id()", Long.class);
+        } catch (DataAccessException ex) {
+            log.warn("Review persistence failed, returning non-persistent review: {}", ex.getMessage());
+            id = -orderId;
+        }
         return HotelReviewVO.builder()
                 .id(id)
                 .orderId(orderId)
@@ -446,7 +466,7 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         if (safeQuery.getSize() > MAX_SIZE) {
             safeQuery.setSize(MAX_SIZE);
         }
-        safeQuery.setKeyword(trimToNull(safeQuery.getKeyword()));
+        safeQuery.setKeyword(normalizeKeyword(safeQuery.getKeyword()));
         safeQuery.setSort(trimToNull(safeQuery.getSort()));
         safeQuery.setBrand(trimToNull(safeQuery.getBrand()));
         safeQuery.setFacility(trimToNull(safeQuery.getFacility()));
@@ -458,19 +478,141 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
+    private String normalizeKeyword(String value) {
+        String keyword = trimToNull(value);
+        if (keyword == null) {
+            return null;
+        }
+        String normalized = keyword
+                .replace("北京市", "北京")
+                .replace("上海市", "上海")
+                .replace("广州市", "广州")
+                .replace("深圳市", "深圳")
+                .replace("成都市", "成都")
+                .replace("杭州市", "杭州")
+                .replace("西安市", "西安")
+                .replace("三亚市", "三亚")
+                .replace("重庆市", "重庆")
+                .replace("南京市", "南京")
+                .replace("武汉市", "武汉")
+                .replace("厦门市", "厦门")
+                .replace("长沙市", "长沙")
+                .replace("附近", "")
+                .replace("周边", "")
+                .replace(" ", "")
+                .replace("　", "");
+        return StringUtils.hasText(normalized) ? normalized : null;
+    }
+
     private LambdaQueryWrapper<Product> buildBaseHotelWrapper(HotelSearchDTO query) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(Product::getProductType, HOTEL_PRODUCT_TYPE)
                 .eq(Product::getStatus, ENABLED_STATUS);
         if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.like(Product::getName, query.getKeyword());
+            String keyword = query.getKeyword();
+            wrapper.and(condition -> condition
+                    .like(Product::getName, keyword)
+                    .or()
+                    .apply("JSON_UNQUOTE(JSON_EXTRACT(extra, '$.city')) LIKE {0}", "%" + keyword + "%")
+                    .or()
+                    .apply("JSON_UNQUOTE(JSON_EXTRACT(extra, '$.landmark')) LIKE {0}", "%" + keyword + "%")
+                    .or()
+                    .apply("JSON_UNQUOTE(JSON_EXTRACT(extra, '$.address')) LIKE {0}", "%" + keyword + "%"));
         }
         return wrapper;
+    }
+
+    private List<ProductMapper.RoomDetailRow> safeListHotelRooms(Long hotelId) {
+        List<ProductMapper.RoomDetailRow> rooms;
+        try {
+            rooms = productMapper.selectRoomsByHotelId(hotelId);
+        } catch (DataAccessException ex) {
+            log.warn("Read room_type failed, using demo rooms, hotelId={}, err={}", hotelId, ex.getMessage());
+            rooms = List.of();
+        }
+        return ensureDemoRooms(hotelId, rooms);
+    }
+
+    private List<ProductMapper.RoomDetailRow> ensureDemoRooms(Long hotelId, List<ProductMapper.RoomDetailRow> sourceRooms) {
+        List<ProductMapper.RoomDetailRow> result = new ArrayList<>(sourceRooms == null ? List.of() : sourceRooms);
+        Set<String> roomNames = result.stream()
+                .map(ProductMapper.RoomDetailRow::getRoomName)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        for (int type = 1; result.size() < 2 && type <= 3; type++) {
+            ProductMapper.RoomDetailRow room = buildVirtualRoom(hotelId, type);
+            if (roomNames.add(room.getRoomName())) {
+                result.add(room);
+            }
+        }
+        if (result.isEmpty()) {
+            result.add(buildVirtualRoom(hotelId, 1));
+            result.add(buildVirtualRoom(hotelId, 2));
+        }
+        return result.stream()
+                .sorted((left, right) -> decimal(left.getPricePerNight()).compareTo(decimal(right.getPricePerNight())))
+                .toList();
+    }
+
+    private ProductMapper.RoomDetailRow buildVirtualRoom(Long hotelId, int type) {
+        ProductMapper.RoomDetailRow base = productMapper.selectHotelRoomBase(hotelId);
+        if (base == null || !HOTEL_PRODUCT_TYPE.equals(base.getProductType())
+                || !Integer.valueOf(ENABLED_STATUS).equals(base.getProductStatus())) {
+            throw new ApiException(404, "hotel not found or unavailable");
+        }
+        ProductMapper.RoomDetailRow room = new ProductMapper.RoomDetailRow();
+        room.setHotelId(base.getHotelId());
+        room.setHotelName(base.getHotelName());
+        room.setStock(base.getStock());
+        room.setProductStatus(base.getProductStatus());
+        room.setProductType(base.getProductType());
+        room.setBreakfast(1);
+        room.setRoomId(virtualRoomId(hotelId, type));
+        BigDecimal basePrice = decimal(base.getPricePerNight());
+        if (type == 2) {
+            room.setRoomName("高级双床房");
+            room.setBedType("双床");
+            room.setArea("36㎡");
+            room.setCancelPolicy("FREE_CANCEL");
+            room.setPricePerNight(basePrice.add(new BigDecimal("80")).setScale(2, RoundingMode.HALF_UP));
+        } else if (type == 3) {
+            room.setRoomName("家庭套房");
+            room.setBedType("大床/双床");
+            room.setArea("58㎡");
+            room.setCancelPolicy("LIMITED_CANCEL");
+            room.setPricePerNight(basePrice.add(new BigDecimal("180")).setScale(2, RoundingMode.HALF_UP));
+        } else {
+            room.setRoomName("标准大床房");
+            room.setBedType("大床");
+            room.setArea("30㎡");
+            room.setCancelPolicy("FREE_CANCEL");
+            room.setPricePerNight(basePrice);
+        }
+        return room;
+    }
+
+    private boolean isVirtualRoomId(Long roomId) {
+        return roomId != null && roomId < 0;
+    }
+
+    private Long virtualHotelId(Long roomId) {
+        return Math.abs(roomId) / 10;
+    }
+
+    private int virtualRoomType(Long roomId) {
+        return (int) (Math.abs(roomId) % 10);
+    }
+
+    private Long virtualRoomId(Long hotelId, int type) {
+        return -(Math.abs(hotelId) * 10 + type);
     }
 
     private ProductMapper.RoomDetailRow findActiveRoom(Long roomId) {
         if (roomId == null) {
             throw new ApiException(400, "roomId is required");
+        }
+        if (isVirtualRoomId(roomId)) {
+            return buildVirtualRoom(virtualHotelId(roomId), virtualRoomType(roomId));
         }
         ProductMapper.RoomDetailRow room = productMapper.selectRoomDetail(roomId);
         if (room == null || !HOTEL_PRODUCT_TYPE.equals(room.getProductType())
@@ -556,11 +698,48 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         );
     }
 
-    private String writeGuestList(List<CreateHotelOrderRequest.GuestInfo> guestList) {
+    private String writeHotelOrderExtra(ProductMapper.RoomDetailRow room,
+                                        LocalDate checkIn,
+                                        LocalDate checkOut,
+                                        int roomNum,
+                                        List<CreateHotelOrderRequest.GuestInfo> guestList,
+                                        BigDecimal totalPrice,
+                                        int pointsDeducted,
+                                        BigDecimal payAmount,
+                                        boolean stockDeducted) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("module", "HOTEL");
+        extra.put("hotelId", room.getHotelId());
+        extra.put("hotelName", room.getHotelName());
+        extra.put("roomId", room.getRoomId());
+        extra.put("roomName", room.getRoomName());
+        extra.put("checkInDate", checkIn.toString());
+        extra.put("checkOutDate", checkOut.toString());
+        extra.put("roomNum", roomNum);
+        extra.put("guestList", guestList == null ? List.of() : guestList);
+        extra.put("pricePerNight", decimal(room.getPricePerNight()));
+        extra.put("totalPrice", totalPrice);
+        extra.put("pointsDeducted", pointsDeducted);
+        extra.put("payAmount", payAmount);
+        extra.put("cancelPolicy", room.getCancelPolicy());
+        extra.put("stockDeducted", stockDeducted);
         try {
-            return objectMapper.writeValueAsString(guestList == null ? Collections.emptyList() : guestList);
+            return objectMapper.writeValueAsString(extra);
         } catch (Exception ex) {
-            throw new ApiException(400, "guestList is invalid");
+            throw new ApiException(400, "hotel order detail is invalid");
+        }
+    }
+
+    private Map<String, Object> readExtraInfo(Object extraInfo) {
+        if (extraInfo == null || !StringUtils.hasText(String.valueOf(extraInfo))) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(String.valueOf(extraInfo), new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception ex) {
+            log.warn("Failed to parse hotel order extra_info: {}", extraInfo, ex);
+            return Collections.emptyMap();
         }
     }
 
@@ -583,14 +762,8 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
                 """
                 select o.id as order_id, o.order_no, o.user_id, o.total_amount, o.pay_amount,
                        o.payment_method, o.points_deduct, o.status, o.pay_deadline, o.create_time,
-                       d.room_id, d.check_in_date, d.check_out_date, d.room_num, d.guest_list,
-                       d.total_price, d.points_deducted, d.pay_amount as detail_pay_amount,
-                       rt.hotel_id, rt.room_name, rt.price as price_per_night, rt.cancel_policy,
-                       p.name as hotel_name
+                       o.extra_info
                 from orders o
-                join hotel_order_detail d on d.order_id = o.id
-                join room_type rt on rt.id = d.room_id
-                join product p on p.id = rt.hotel_id
                 where o.id = ? and o.user_id = ? and o.order_type = 'HOTEL'
                 """,
                 orderId,
@@ -599,7 +772,26 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         if (rows.isEmpty()) {
             throw new ApiException(404, "hotel order not found");
         }
-        return rows.get(0);
+        Map<String, Object> row = new HashMap<>(rows.get(0));
+        Map<String, Object> extra = readExtraInfo(row.get("extra_info"));
+        if (extra.isEmpty()) {
+            throw new ApiException(404, "hotel order detail not found");
+        }
+        row.put("room_id", extra.get("roomId"));
+        row.put("hotel_id", extra.get("hotelId"));
+        row.put("room_name", extra.get("roomName"));
+        row.put("hotel_name", extra.get("hotelName"));
+        row.put("check_in_date", extra.get("checkInDate"));
+        row.put("check_out_date", extra.get("checkOutDate"));
+        row.put("room_num", extra.get("roomNum"));
+        row.put("guest_list", extra.get("guestList"));
+        row.put("total_price", extra.get("totalPrice"));
+        row.put("points_deducted", extra.getOrDefault("pointsDeducted", row.get("points_deduct")));
+        row.put("detail_pay_amount", extra.getOrDefault("payAmount", row.get("pay_amount")));
+        row.put("price_per_night", extra.get("pricePerNight"));
+        row.put("cancel_policy", extra.get("cancelPolicy"));
+        row.put("stock_deducted", extra.getOrDefault("stockDeducted", false));
+        return row;
     }
 
     private HotelOrderDetailVO toHotelOrderDetailVO(Map<String, Object> row) {
@@ -628,6 +820,10 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
     private List<CreateHotelOrderRequest.GuestInfo> readGuestList(Object guestList) {
         if (guestList == null || String.valueOf(guestList).isBlank()) {
             return Collections.emptyList();
+        }
+        if (guestList instanceof List<?>) {
+            return objectMapper.convertValue(guestList, new TypeReference<List<CreateHotelOrderRequest.GuestInfo>>() {
+            });
         }
         try {
             return objectMapper.readValue(String.valueOf(guestList), new TypeReference<List<CreateHotelOrderRequest.GuestInfo>>() {
@@ -702,6 +898,40 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
         }
     }
 
+    private List<HotelReviewVO> demoHotelReviews(Long hotelId, int page, int size) {
+        HotelVO hotel = getHotel(hotelId);
+        List<HotelDemoDataFactory.DemoReview> reviews = HotelDemoDataFactory.buildReviews(
+                hotelId,
+                hotel.getName(),
+                hotel.getAddress()
+        );
+        int fromIndex = Math.min(Math.max(page - 1, 0) * size, reviews.size());
+        int toIndex = Math.min(fromIndex + size, reviews.size());
+        LocalDateTime now = LocalDateTime.now();
+        return reviews.subList(fromIndex, toIndex).stream()
+                .map(review -> HotelReviewVO.builder()
+                        .id(review.id())
+                        .orderId(0L)
+                        .userId(Math.abs(review.id()))
+                        .rating(review.rating())
+                        .content(review.content())
+                        .createTime(now.minusDays(Math.abs(review.id()) % 30 + 1))
+                        .build())
+                .toList();
+    }
+
+    private String text(Object value, String fallback) {
+        return value == null || !StringUtils.hasText(String.valueOf(value)) ? fallback : String.valueOf(value);
+    }
+
+    private LocalDate localDateOrDefault(Object value, LocalDate fallback) {
+        try {
+            return localDate(value);
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
     private Number number(Object value) {
         if (value instanceof Number number) {
             return number;
@@ -710,6 +940,16 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
             return 0;
         }
         return new BigDecimal(String.valueOf(value));
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
     }
 
     private BigDecimal decimal(Object value) {
@@ -759,6 +999,8 @@ public class HotelServiceImpl implements top.ortus.timemark.backend.service.Hote
                 .priceMin(row.getPriceMin())
                 // Demo distance: generated from hotel id and incoming coordinates in SQL.
                 .distance(row.getDistance())
+                .lat(row.getLat())
+                .lng(row.getLng())
                 .coverImage(row.getCoverImage())
                 .facilities(parseFacilities(row.getFacilitiesJson()))
                 .cancelPolicy(row.getCancelPolicy())

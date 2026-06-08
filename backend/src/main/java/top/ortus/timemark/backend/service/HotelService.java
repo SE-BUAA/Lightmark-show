@@ -21,6 +21,9 @@ public interface HotelService {
     PageResult<HotelVO> searchHotels(Long userId, HotelSearchDTO query);
 
     @Transactional(readOnly = true)
+    HotelVO getHotel(Long hotelId);
+
+    @Transactional(readOnly = true)
     RoomDetailVO getRoomDetail(Long roomId, String checkInDate, String checkOutDate);
 
     @Transactional(readOnly = true)

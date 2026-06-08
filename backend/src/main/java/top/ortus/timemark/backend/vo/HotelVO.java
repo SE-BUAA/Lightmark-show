@@ -28,6 +28,10 @@ public class HotelVO {
 
     private Double distance;
 
+    private Double lat;
+
+    private Double lng;
+
     private String coverImage;
 
     private List<String> facilities;

@@ -2,6 +2,7 @@ package top.ortus.timemark.backend.config;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -32,27 +33,46 @@ public class DatabaseCompatibilityMigrator implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final boolean bulkSeedEnabled;
 
-    public DatabaseCompatibilityMigrator(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public DatabaseCompatibilityMigrator(
+        JdbcTemplate jdbcTemplate,
+        ObjectMapper objectMapper,
+        @Value("${timemark.database.compatibility.bulk-seed-enabled:false}") boolean bulkSeedEnabled
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.bulkSeedEnabled = bulkSeedEnabled;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        addColumnIfMissing("user", "avatar", "ALTER TABLE `user` ADD COLUMN avatar VARCHAR(500) DEFAULT ''");
-        addColumnIfMissing("user", "gender", "ALTER TABLE `user` ADD COLUMN gender TINYINT DEFAULT 0");
-        addColumnIfMissing("user", "birth_date", "ALTER TABLE `user` ADD COLUMN birth_date DATE NULL");
-        addColumnIfMissing("orders", "changed_once", "ALTER TABLE orders ADD COLUMN changed_once TINYINT DEFAULT 0");
-        addColumnIfMissing("orders", "original_order_no", "ALTER TABLE orders ADD COLUMN original_order_no VARCHAR(32) NULL");
-        normalizeVacationProducts();
-        normalizeVacationDays();
-        normalizeBulkTrainNames();
-        seedVacationProduct("三亚海岛五日自由行", 2999.00, 30, "三亚", "北京", "2026-06-15", 5, "五星", "海景酒店连住，含接送机", "海岛", "自由行", "亲子");
-        seedVacationProduct("云南古城六日跟团游", 2580.00, 24, "丽江", "上海", "2026-06-20", 6, "四星", "丽江大理双城，含经典景点门票", "古城", "跟团游", "摄影");
-        seedVacationProduct("成都美食四日私享团", 1880.00, 18, "成都", "广州", "2026-07-02", 4, "四星", "小团出行，城市美食和周边慢游", "美食", "私享团", "城市");
-        seedBulkVacationProducts();
-        seedBulkTrainProducts();
+        runStep("add user.avatar column", () -> addColumnIfMissing("user", "avatar", "ALTER TABLE `user` ADD COLUMN avatar VARCHAR(500) DEFAULT ''"));
+        runStep("add user.gender column", () -> addColumnIfMissing("user", "gender", "ALTER TABLE `user` ADD COLUMN gender TINYINT DEFAULT 0"));
+        runStep("add user.birth_date column", () -> addColumnIfMissing("user", "birth_date", "ALTER TABLE `user` ADD COLUMN birth_date DATE NULL"));
+        runStep("add orders.changed_once column", () -> addColumnIfMissing("orders", "changed_once", "ALTER TABLE orders ADD COLUMN changed_once TINYINT DEFAULT 0"));
+        runStep("add orders.original_order_no column", () -> addColumnIfMissing("orders", "original_order_no", "ALTER TABLE orders ADD COLUMN original_order_no VARCHAR(32) NULL"));
+        runStep("normalize vacation products", this::normalizeVacationProducts);
+        runStep("normalize vacation days", this::normalizeVacationDays);
+        runStep("normalize bulk train names", this::normalizeBulkTrainNames);
+        runStep("seed default vacation product 1", () -> seedVacationProduct("三亚海岛五日自由行", 2999.00, 30, "三亚", "北京", "2026-06-15", 5, "五星", "海景酒店连住，含接送机", "海岛", "自由行", "亲子"));
+        runStep("seed default vacation product 2", () -> seedVacationProduct("云南古城六日跟团游", 2580.00, 24, "丽江", "上海", "2026-06-20", 6, "四星", "丽江大理双城，含经典景点门票", "古城", "跟团游", "摄影"));
+        runStep("seed default vacation product 3", () -> seedVacationProduct("成都美食四日私享团", 1880.00, 18, "成都", "广州", "2026-07-02", 4, "四星", "小团出行，城市美食和周边慢游", "美食", "私享团", "城市"));
+
+        if (bulkSeedEnabled) {
+            runStep("seed bulk vacation products", this::seedBulkVacationProducts);
+            runStep("seed bulk train products", this::seedBulkTrainProducts);
+        } else {
+            log.info("Bulk product seed skipped. Set timemark.database.compatibility.bulk-seed-enabled=true to enable it.");
+        }
+    }
+
+    private void runStep(String stepName, Runnable step) {
+        try {
+            step.run();
+        } catch (Exception ex) {
+            log.warn("Database compatibility step '{}' failed; continuing startup. Cause: {}", stepName, ex.getMessage(), ex);
+        }
     }
 
     private void addColumnIfMissing(String tableName, String columnName, String ddl) {

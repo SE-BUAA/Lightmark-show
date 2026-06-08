@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import top.ortus.timemark.backend.dto.module.TravelPlanDTO;
 import top.ortus.timemark.backend.service.AIService;
 import top.ortus.timemark.backend.service.HotelService;
 import top.ortus.timemark.backend.utils.AIClient;
+import top.ortus.timemark.backend.utils.HotelDemoDataFactory;
 import top.ortus.timemark.backend.vo.HotelVO;
 
 import java.math.BigDecimal;
@@ -132,10 +134,11 @@ public class AIServiceImpl implements AIService {
     public AIRecommendResultVO recommendHotel(String userInput) {
         long start = System.currentTimeMillis();
         String safeInput = userInput == null ? "" : userInput.trim();
-        String prompt = String.format(loadPrompt(
+        String prompt = renderPrompt(
                 hotelRecommendPrompt,
-                "用户需求：%s。请提取以下字段：目的地、价格上限、房间数、入住人数、偏好设施、星级要求。返回 JSON 格式。"
-        ), safeInput);
+                "用户需求：%s。请提取以下字段：目的地、价格上限、房间数、入住人数、偏好设施、星级要求。返回 JSON 格式。",
+                safeInput
+        );
         log.info("AI hotel recommend prompt={}, length={}", mask(prompt), prompt.length());
 
         boolean modelUsed = true;
@@ -183,40 +186,53 @@ public class AIServiceImpl implements AIService {
         if (hotelId == null) {
             return fallbackReviewSummary(List.of());
         }
-        List<String> comments = jdbcTemplate.query(
-                """
-                select content
-                from review
-                where product_id = ?
-                  and status = 1
-                  and (target_type is null or target_type = 'HOTEL' or target_type = '')
-                order by create_time desc
-                limit 20
-                """,
-                (rs, rowNum) -> rs.getString("content"),
-                hotelId
-        );
+        List<String> comments;
+        try {
+            comments = jdbcTemplate.query(
+                    """
+                    select content
+                    from review
+                    where product_id = ?
+                      and status = 1
+                      and (target_type is null or target_type = 'HOTEL' or target_type = '')
+                    order by create_time desc
+                    limit 20
+                    """,
+                    (rs, rowNum) -> rs.getString("content"),
+                    hotelId
+            );
+        } catch (DataAccessException ex) {
+            log.warn("Read review table failed, using demo reviews, hotelId={}, err={}", hotelId, ex.getMessage());
+            comments = List.of();
+        }
         if (comments.isEmpty()) {
-            return ReviewSummaryVO.builder()
-                    .pros(List.of())
-                    .cons(List.of())
-                    .overall("暂无评论，建议结合价格、位置和房型综合判断。")
-                    .build();
+            comments = demoReviewContents(hotelId);
         }
 
-        String prompt = String.format(loadPrompt(
+        String prompt = renderPrompt(
                 reviewSummaryPrompt,
-                "请分析以下酒店评论，提取优点、缺点和总体评价，以 JSON 格式返回：{ \"pros\": [], \"cons\": [], \"overall\": \"\" }。评论内容：%s"
-        ), String.join("\n", comments));
+                "请分析以下酒店评论，提取优点、缺点和总体评价，以 JSON 格式返回：{ \"pros\": [], \"cons\": [], \"overall\": \"\" }。评论内容：%s",
+                String.join("\n", comments)
+        );
         log.info("AI review summary prompt={}, length={}", mask(prompt), prompt.length());
 
+        final List<String> finalComments = comments;
         try {
             return aiClient.chat(prompt)
                     .map(this::parseReviewSummary)
-                    .orElseGet(() -> fallbackReviewSummary(comments));
+                    .orElseGet(() -> fallbackReviewSummary(finalComments));
         } catch (Exception ex) {
             log.warn("AI review summary fallback, hotelId={}, err={}", hotelId, ex.getMessage());
-            return fallbackReviewSummary(comments);
+            return fallbackReviewSummary(finalComments);
+        }
+    }
+
+    private List<String> demoReviewContents(Long hotelId) {
+        try {
+            HotelVO hotel = hotelService.getHotel(hotelId);
+            return HotelDemoDataFactory.buildReviewContents(hotelId, hotel.getName(), hotel.getAddress());
+        } catch (Exception ex) {
+            return HotelDemoDataFactory.buildReviewContents(hotelId, "这家酒店", "核心商圈");
         }
     }
 
@@ -233,7 +249,7 @@ public class AIServiceImpl implements AIService {
                 + "；出发日期=" + (startDate == null ? "未填写" : startDate)
                 + "；预算=" + valueOrDefault(budget, "未填写")
                 + "；偏好=" + valueOrDefault(preferences, "未填写");
-        String prompt = String.format(loadPrompt(travelPlanPrompt, "请生成旅行行程 JSON：%s"), userNeed);
+        String prompt = renderPrompt(travelPlanPrompt, "请生成旅行行程 JSON：%s", userNeed);
         log.info("AI travel plan prompt={}, length={}", mask(prompt), prompt.length());
         try {
             return aiClient.chat(prompt)
@@ -484,6 +500,15 @@ public class AIServiceImpl implements AIService {
         } catch (Exception ex) {
             return fallback;
         }
+    }
+
+    private String renderPrompt(Resource resource, String fallback, String value) {
+        String template = loadPrompt(resource, fallback);
+        String safeValue = value == null ? "" : value;
+        if (template.contains("%s")) {
+            return template.replace("%s", safeValue);
+        }
+        return template + "\n" + safeValue;
     }
 
     private TravelPlanDTO fallbackTravelPlan(String destination, int days, LocalDate startDate, String preferences, String budget) {

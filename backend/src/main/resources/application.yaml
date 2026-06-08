@@ -11,8 +11,11 @@ spring:
     username: ${DB_USER:se}
     password: ${DB_PASSWORD:sebuaa}
     hikari:
-      max-lifetime: 600000
-      keepalive-time: 300000
+      max-lifetime: 240000
+      keepalive-time: 120000
+      idle-timeout: 180000
+      connection-timeout: 10000
+      validation-timeout: 3000
   sql:
     init:
       mode: never
@@ -116,6 +119,8 @@ timemark:
           - 专属客服
           - 生日礼包
   database:
+    compatibility:
+      bulk-seed-enabled: ${DB_COMPATIBILITY_BULK_SEED_ENABLED:false}
     # Database table definitions
     tables:
       - user

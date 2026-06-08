@@ -29,6 +29,8 @@ public interface ProductMapper extends BaseMapper<Product> {
                 JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.address')) AS address,
                 CAST(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.starLevel')) AS UNSIGNED) AS starLevel,
                 JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.coverImage')) AS coverImage,
+                CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.lat')), 'null') AS DECIMAL(10,6)) AS lat,
+                CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.lng')), 'null') AS DECIMAL(10,6)) AS lng,
                 JSON_EXTRACT(product.extra, '$.facilities') AS facilitiesJson,
                 COALESCE(MIN(rt.price), product.price, 0) AS priceMin,
                 MIN(rt.cancel_policy) AS cancelPolicy,
@@ -97,11 +99,44 @@ public interface ProductMapper extends BaseMapper<Product> {
 
     @Select("""
             SELECT
+                product.id AS id,
+                product.name AS name,
+                JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.address')) AS address,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.starLevel')) AS UNSIGNED) AS starLevel,
+                JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.coverImage')) AS coverImage,
+                CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.lat')), 'null') AS DECIMAL(10,6)) AS lat,
+                CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(product.extra, '$.lng')), 'null') AS DECIMAL(10,6)) AS lng,
+                JSON_EXTRACT(product.extra, '$.facilities') AS facilitiesJson,
+                COALESCE(MIN(rt.price), product.price, 0) AS priceMin,
+                MIN(rt.cancel_policy) AS cancelPolicy,
+                ROUND(3.5 + (CRC32(CAST(product.id AS CHAR)) % 151) / 100, 1) AS rating,
+                NULL AS distance
+            FROM product
+            LEFT JOIN room_type rt ON rt.hotel_id = product.id
+            WHERE product.id = #{hotelId}
+              AND product.product_type = 'HOTEL'
+              AND product.status = 1
+            GROUP BY product.id, product.name, product.price, product.extra
+            """)
+    HotelSearchRow selectHotelById(@Param("hotelId") Long hotelId);
+
+    @Select("""
+            SELECT
                 rt.id AS roomId,
                 rt.hotel_id AS hotelId,
                 rt.room_name AS roomName,
-                rt.bed_type AS bedType,
-                rt.area AS area,
+                CASE
+                    WHEN rt.room_name LIKE '%双床%' THEN '双床'
+                    WHEN rt.room_name LIKE '%大床%' THEN '大床'
+                    WHEN rt.room_name LIKE '%套房%' THEN '大床/双床'
+                    ELSE '床型待确认'
+                END AS bedType,
+                CASE
+                    WHEN rt.room_name LIKE '%套房%' THEN '58㎡'
+                    WHEN rt.room_name LIKE '%双床%' THEN '36㎡'
+                    WHEN rt.room_name LIKE '%大床%' THEN '30㎡'
+                    ELSE '面积待确认'
+                END AS area,
                 rt.breakfast AS breakfast,
                 rt.cancel_policy AS cancelPolicy,
                 rt.price AS pricePerNight,
@@ -120,8 +155,18 @@ public interface ProductMapper extends BaseMapper<Product> {
                 rt.id AS roomId,
                 rt.hotel_id AS hotelId,
                 rt.room_name AS roomName,
-                rt.bed_type AS bedType,
-                rt.area AS area,
+                CASE
+                    WHEN rt.room_name LIKE '%双床%' THEN '双床'
+                    WHEN rt.room_name LIKE '%大床%' THEN '大床'
+                    WHEN rt.room_name LIKE '%套房%' THEN '大床/双床'
+                    ELSE '床型待确认'
+                END AS bedType,
+                CASE
+                    WHEN rt.room_name LIKE '%套房%' THEN '58㎡'
+                    WHEN rt.room_name LIKE '%双床%' THEN '36㎡'
+                    WHEN rt.room_name LIKE '%大床%' THEN '30㎡'
+                    ELSE '面积待确认'
+                END AS area,
                 rt.breakfast AS breakfast,
                 rt.cancel_policy AS cancelPolicy,
                 rt.price AS pricePerNight,
@@ -137,6 +182,21 @@ public interface ProductMapper extends BaseMapper<Product> {
             ORDER BY rt.price ASC, rt.id ASC
             """)
     java.util.List<RoomDetailRow> selectRoomsByHotelId(@Param("hotelId") Long hotelId);
+
+    @Select("""
+            SELECT
+                p.id AS hotelId,
+                p.name AS hotelName,
+                COALESCE(p.price, 300) AS pricePerNight,
+                p.stock AS stock,
+                p.status AS productStatus,
+                p.product_type AS productType
+            FROM product p
+            WHERE p.id = #{hotelId}
+              AND p.product_type = 'HOTEL'
+              AND p.status = 1
+            """)
+    RoomDetailRow selectHotelRoomBase(@Param("hotelId") Long hotelId);
 
     @Update("""
             UPDATE product
@@ -163,6 +223,10 @@ public interface ProductMapper extends BaseMapper<Product> {
         private Integer starLevel;
 
         private String coverImage;
+
+        private Double lat;
+
+        private Double lng;
 
         private String facilitiesJson;
 
