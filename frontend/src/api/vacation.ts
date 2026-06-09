@@ -73,8 +73,8 @@ export function createVacationOrder(data: VacationOrderPayload) {
   return http.post<TrainOrderResponse>('/orders/vacation', data)
 }
 
-export function payVacationOrder(orderNo: string) {
-  return http.post<TrainOrderResponse>(`/orders/train/${orderNo}/pay`)
+export function payVacationOrder(orderNo: string, paymentMethod?: string) {
+  return http.post<TrainOrderResponse>(`/orders/${orderNo}/pay`, { paymentMethod })
 }
 
 export function refundVacationOrder(orderNo: string) {

@@ -9,6 +9,7 @@ export interface LoginRequest {
   account: string;
   password: string;
   captchaCode: string;
+  privacyAccepted: boolean;
 }
 
 export interface RegisterRequest {
@@ -19,6 +20,7 @@ export interface RegisterRequest {
   password: string;
   verificationCode: string;
   captchaCode: string;
+  privacyAccepted: boolean;
 }
 
 export interface SendEmailVerificationCodeRequest {

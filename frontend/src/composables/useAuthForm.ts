@@ -182,13 +182,14 @@ export function useAuthForm() {
     return "";
   };
 
-  const buildLoginPayload = (): LoginRequest => ({
+  const buildLoginPayload = (privacyAccepted: boolean): LoginRequest => ({
     account: normalizedAccount.value,
     password: form.password,
     captchaCode: normalizedCaptchaCode.value,
+    privacyAccepted,
   });
 
-  const buildRegisterPayload = (): RegisterRequest => ({
+  const buildRegisterPayload = (privacyAccepted: boolean): RegisterRequest => ({
     email: normalizedEmail.value,
     nickname: normalizedNickname.value,
     countryCode: normalizedPhone.value ? normalizedCountryCode.value : "",
@@ -196,6 +197,7 @@ export function useAuthForm() {
     password: form.password,
     verificationCode: normalizedVerificationCode.value,
     captchaCode: normalizedCaptchaCode.value,
+    privacyAccepted,
   });
 
   const buildSendRegisterEmailPayload = (): SendEmailVerificationCodeRequest => ({

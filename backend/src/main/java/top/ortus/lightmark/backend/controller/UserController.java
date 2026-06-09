@@ -25,9 +25,11 @@ import top.ortus.lightmark.backend.dto.user.UserLevelUpgradeInfoDTO;
 import top.ortus.lightmark.backend.dto.user.UserPasswordUpdateRequest;
 import top.ortus.lightmark.backend.dto.user.UserUpdateRequest;
 import top.ortus.lightmark.backend.exception.ApiException;
+import top.ortus.lightmark.backend.service.FlightSearchService;
 import top.ortus.lightmark.backend.service.GenericCrudService;
 import top.ortus.lightmark.backend.service.MembershipService;
 import top.ortus.lightmark.backend.service.ObjectStorageService;
+import top.ortus.lightmark.backend.service.OrderService;
 import top.ortus.lightmark.backend.service.UserService;
 import top.ortus.lightmark.backend.security.UserIdentity;
 import top.ortus.lightmark.backend.utils.UserIdFormatter;
@@ -48,6 +50,8 @@ public class UserController {
     private final JwtTokenService jwtTokenService;
     private final MembershipService membershipService;
     private final ObjectStorageService objectStorageService;
+    private final OrderService orderService;
+    private final FlightSearchService flightSearchService;
 
     /**
      * 构造函数
@@ -57,12 +61,16 @@ public class UserController {
                           GenericCrudService genericCrudService,
                           JwtTokenService jwtTokenService,
                           MembershipService membershipService,
-                          ObjectStorageService objectStorageService) {
+                          ObjectStorageService objectStorageService,
+                          OrderService orderService,
+                          FlightSearchService flightSearchService) {
         this.userService = userService;
         this.genericCrudService = genericCrudService;
         this.jwtTokenService = jwtTokenService;
         this.membershipService = membershipService;
         this.objectStorageService = objectStorageService;
+        this.orderService = orderService;
+        this.flightSearchService = flightSearchService;
     }
 
     @GetMapping("/current")
@@ -177,6 +185,22 @@ public class UserController {
         Map<String, String> filters = Map.of("order_no", orderNo, "user_id", resolveUserId(authorization));
         List<OrderDTO> items = genericCrudService.listTyped("orders", filters, OrderDTO.class);
         return ApiResponse.ok(items.isEmpty() ? null : items.get(0));
+    }
+
+    @PostMapping("/orders/{orderNo}/refund")
+    public ApiResponse<Object> refundOrder(@PathVariable String orderNo,
+                                           @RequestHeader("Authorization") String authorization) {
+        OrderDTO order = orderDetail(orderNo, authorization).getData();
+        if (order == null) {
+            throw new ApiException(404, "order not found");
+        }
+        String orderType = order.getOrder_type() == null ? "" : order.getOrder_type().toUpperCase();
+        return switch (orderType) {
+            case "TRAIN" -> ApiResponse.ok(orderService.refundTrainOrder(orderNo));
+            case "VACATION" -> ApiResponse.ok(orderService.refundVacationOrder(orderNo));
+            case "FLIGHT", "HOTEL" -> ApiResponse.ok(flightSearchService.refundOrder(orderNo));
+            default -> throw new ApiException(400, "unsupported order type");
+        };
     }
 
     private String resolveUserId(String authorization) {

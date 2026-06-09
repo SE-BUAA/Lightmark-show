@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import {
@@ -15,6 +15,7 @@ import { useAuthStore } from "@/stores/auth";
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const privacyAccepted = ref(false);
 
 const {
   form,
@@ -40,26 +41,45 @@ const {
 const title = computed(() => (isRegisterMode.value ? "用户注册" : "用户登录"));
 const submitLabel = computed(() => (isRegisterMode.value ? "注册并登录" : "登录"));
 
+const openPrivacyPolicy = () => {
+  const href = router.resolve({ path: "/privacy-policy" }).href;
+  window.open(href, "_blank", "noopener");
+};
+
+const switchMode = () => {
+  toggleMode();
+  privacyAccepted.value = false;
+};
+
 const submit = async () => {
   const validationMessage = validateBeforeSubmit();
   if (validationMessage) {
     ElMessage.warning(validationMessage);
     return;
   }
+  if (isRegisterMode.value && !privacyAccepted.value) {
+    ElMessage.warning("请先阅读并同意隐私政策");
+    return;
+  }
+  if (!isRegisterMode.value && !privacyAccepted.value) {
+    ElMessage.warning("登录前请先阅读并同意隐私政策");
+    return;
+  }
 
   submitting.value = true;
   try {
     if (isRegisterMode.value) {
-      await registerApi(buildRegisterPayload());
+      await registerApi(buildRegisterPayload(privacyAccepted.value));
       ElMessage.success("注册成功，请登录");
       isRegisterMode.value = false;
+      privacyAccepted.value = false;
       form.verificationCode = "";
       form.captchaCode = "";
       refreshCaptcha();
       return;
     }
 
-    const loginRes = await loginApi(buildLoginPayload());
+    const loginRes = await loginApi(buildLoginPayload(privacyAccepted.value));
     authStore.setSession(loginRes as unknown as Record<string, unknown>);
     ElMessage.success("登录成功");
 
@@ -150,14 +170,13 @@ const sendVerificationCode = async () => {
           <CaptchaField v-model="form.captchaCode" :image-url="captchaUrl" @refresh="refreshCaptcha" />
         </el-form-item>
 
-        <el-form-item v-if="isRegisterMode" label="注册邮箱验证码">
-          <VerificationCodeField
-            v-model="form.verificationCode"
-            :button-text="sendButtonText"
-            :disabled="!canSendCode"
-            :loading="sendingCode"
-            @send="sendVerificationCode"
-          />
+        <el-form-item class="consent-item">
+          <el-checkbox v-model="privacyAccepted">
+            我已阅读并同意
+            <button type="button" class="policy-link-button" @click.stop="openPrivacyPolicy">
+              《隐私政策》
+            </button>
+          </el-checkbox>
         </el-form-item>
 
         <el-button
@@ -171,7 +190,7 @@ const sendVerificationCode = async () => {
       </el-form>
 
       <div class="auth-footer">
-        <button class="link-button" type="button" @click="toggleMode">
+        <button class="link-button" type="button" @click="switchMode">
           {{ isRegisterMode ? "已有账号？去登录" : "没有账号？去注册" }}
         </button>
         <router-link to="/admin/login">后台登录入口</router-link>
@@ -281,6 +300,34 @@ const sendVerificationCode = async () => {
   color: var(--white);
   cursor: pointer;
   padding: 0;
+}
+
+.consent-item {
+  margin-top: 4px;
+}
+
+.consent-item :deep(.el-checkbox) {
+  align-items: flex-start;
+  line-height: 1.6;
+}
+
+.consent-item :deep(.el-checkbox__label) {
+  color: rgba(255, 255, 255, 0.82);
+  white-space: normal;
+}
+
+.policy-link-button {
+  display: inline;
+  background: transparent;
+  border: none;
+  color: var(--gold-400);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.policy-link-button:hover {
+  color: var(--gold-300);
 }
 
 .field-error {

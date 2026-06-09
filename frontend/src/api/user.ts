@@ -39,8 +39,10 @@ export interface TravelerDTO {
   id?: string;
   name: string;
   id_card: string;
+  idCard?: string;
   phone?: string;
   id_type?: number;
+  idType?: number;
   create_time?: string;
 }
 
@@ -79,6 +81,24 @@ export interface OrderDTO {
   cancel_reason?: string;
   create_time?: string;
   update_time?: string;
+}
+
+export interface RefundResultDTO {
+  orderNo: string;
+  status: number;
+  statusText?: string;
+  paidAmount?: number;
+  refundAmount?: number;
+  refundRule?: string;
+}
+
+export interface PayResultDTO {
+  orderNo: string;
+  status: number;
+  payAmount?: number;
+  pickupCode?: string;
+  expireTime?: string;
+  paymentMethod?: string;
 }
 
 /** 分页响应 */
@@ -145,7 +165,15 @@ export const changePassword = (data: {
  * GET /api/user/travelers
  */
 export const getTravelers = (): Promise<TravelerDTO[]> => {
-  return http.get<TravelerDTO[]>("/user/travelers");
+  return http.get<TravelerDTO[]>("/user/travelers").then((list) =>
+    (list || []).map((item) => ({
+      ...item,
+      idCard: item.idCard || item.id_card,
+      idType: item.idType ?? item.id_type,
+      id_card: item.id_card || item.idCard || "",
+      id_type: item.id_type ?? item.idType ?? 0,
+    }))
+  );
 };
 
 /**
@@ -153,7 +181,11 @@ export const getTravelers = (): Promise<TravelerDTO[]> => {
  * POST /api/user/travelers
  */
 export const addTraveler = (data: TravelerDTO): Promise<TravelerDTO> => {
-  return http.post<TravelerDTO>("/user/travelers", data);
+  return http.post<TravelerDTO>("/user/travelers", {
+    ...data,
+    id_card: data.id_card || data.idCard || "",
+    id_type: data.id_type ?? data.idType ?? 0,
+  });
 };
 
 /**
@@ -164,7 +196,11 @@ export const updateTraveler = (
   id: number | string,
   data: TravelerDTO
 ): Promise<TravelerDTO> => {
-  return http.put<TravelerDTO>(`/user/travelers/${id}`, data);
+  return http.put<TravelerDTO>(`/user/travelers/${id}`, {
+    ...data,
+    id_card: data.id_card || data.idCard || "",
+    id_type: data.id_type ?? data.idType ?? 0,
+  });
 };
 
 /**
@@ -209,4 +245,24 @@ export const getUserOrders = (): Promise<PageResponse<OrderDTO>> => {
  */
 export const getOrderDetail = (orderNo: string): Promise<OrderDTO> => {
   return http.get<OrderDTO>(`/user/orders/${orderNo}`);
+};
+
+export const refundUserOrder = (
+  order: Pick<OrderDTO, "order_no" | "order_type">
+): Promise<RefundResultDTO> => {
+  const orderType = String(order.order_type || "").toUpperCase();
+  if (orderType === "TRAIN") {
+    return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+  }
+  if (orderType === "VACATION") {
+    return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+  }
+  return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+};
+
+export const payUserOrder = (
+  orderNo: string,
+  paymentMethod: string
+): Promise<PayResultDTO> => {
+  return http.post<PayResultDTO>(`/orders/${orderNo}/pay`, { paymentMethod });
 };

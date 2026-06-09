@@ -161,6 +161,15 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public int assignRole(String userId, int roleId) {
+        return jdbcTemplate.update(
+                "insert into user_role (user_id, role_id) values (?, ?)",
+                userId,
+                roleId
+        );
+    }
+
+    @Override
     public int softDeleteById(String id) {
         if (hasColumn("update_time")) {
             String sql = "update `user` set deleted = 1, update_time = ? where id = ? and deleted = 0";

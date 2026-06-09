@@ -59,6 +59,8 @@ public interface UserRepository {
      */
     int insert(User user);
 
+    int assignRole(String userId, int roleId);
+
     /**
      * 更新用户信息
      * @param user 用户实体

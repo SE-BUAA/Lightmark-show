@@ -15,6 +15,7 @@ public class AuthRegisterRequest {
     private String verificationCode;
     @NotBlank
     private String captchaCode;
+    private Boolean privacyAccepted;
 
     public AuthRegisterRequest() {
     }
@@ -73,5 +74,13 @@ public class AuthRegisterRequest {
 
     public void setCaptchaCode(String captchaCode) {
         this.captchaCode = captchaCode;
+    }
+
+    public Boolean getPrivacyAccepted() {
+        return privacyAccepted;
+    }
+
+    public void setPrivacyAccepted(Boolean privacyAccepted) {
+        this.privacyAccepted = privacyAccepted;
     }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="profile-page">
+  <div class="module-page">
     <!-- ── 顶部横幅 ── -->
     <section class="profile-hero">
       <div class="container">
@@ -262,17 +262,35 @@
           </div>
           <div class="card-body">
             <div v-if="!orders.length" class="empty">暂无订单</div>
-            <div v-else class="list">
+            <div v-else class="list order-list">
               <div class="list-item" v-for="o in orders" :key="o.order_no">
                 <div class="list-main">
-                  <div class="list-title">{{ o.order_no }}</div>
+                  <div class="list-title">{{ orderTypeText(o.order_type) }} · {{ o.order_no }}</div>
                   <div class="list-sub">
-                    {{ o.order_type }} ¥{{ o.pay_amount }}
-                    {{ o.create_time || "" }}
+                    实付 ¥{{ o.pay_amount }}
+                    <span v-if="o.create_time"> · {{ o.create_time }}</span>
                   </div>
+                  <div v-if="o.cancel_reason" class="list-sub order-reason">{{ o.cancel_reason }}</div>
                 </div>
-                <div class="list-actions">
-                  <span class="status">状态: {{ o.status }}</span>
+                <div class="list-actions order-actions">
+                  <span class="status">{{ orderStatusText(o.status) }}</span>
+                  <span v-if="o.payment_method" class="status order-method">支付方式：{{ paymentMethodText(o.payment_method) }}</span>
+                  <button
+                    v-if="canPay(o)"
+                    class="btn-text"
+                    @click="handlePayOrder(o)"
+                    :disabled="payLoadingOrderNo === o.order_no"
+                  >
+                    {{ payLoadingOrderNo === o.order_no ? "支付中..." : "去支付" }}
+                  </button>
+                  <button
+                    v-if="canRefund(o)"
+                    class="btn-text danger"
+                    @click="handleRefundOrder(o)"
+                    :disabled="refundLoadingOrderNo === o.order_no"
+                  >
+                    {{ refundLoadingOrderNo === o.order_no ? "退款中..." : "申请退款" }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -333,6 +351,13 @@
           />
         </div>
         <div class="form-field">
+          <label>证件类型</label>
+          <select v-model="travelerForm.id_type" class="form-input">
+            <option :value="0">身份证</option>
+            <option :value="1">护照</option>
+          </select>
+        </div>
+        <div class="form-field">
           <label>证件号</label>
           <input
             v-model="travelerForm.id_card"
@@ -382,6 +407,8 @@ import {
   getPointsLogs,
   getTravelers,
   getUserOrders,
+  refundUserOrder,
+  payUserOrder,
   uploadAvatarFile,
   updateCurrentUser,
   updateTraveler,
@@ -429,6 +456,43 @@ const genderText = computed(() => {
   return "未设置";
 });
 
+const orderTypeText = (orderType: string) => {
+  const normalized = String(orderType || "").toUpperCase();
+  if (normalized === "FLIGHT") return "机票订单";
+  if (normalized === "HOTEL") return "酒店订单";
+  if (normalized === "TRAIN") return "火车票订单";
+  if (normalized === "VACATION") return "度假订单";
+  return normalized || "订单";
+};
+
+const orderStatusText = (status: number) => {
+  switch (status) {
+    case 0:
+      return "待支付";
+    case 1:
+      return "已支付";
+    case 2:
+      return "已取消";
+    case 3:
+      return "已退款";
+    case 4:
+      return "退款中";
+    default:
+      return `状态 ${status}`;
+  }
+};
+
+const paymentMethodText = (method?: string) => {
+  if (method === "WECHAT") return "微信";
+  if (method === "ALIPAY") return "支付宝";
+  if (method === "MOCK_PAY") return "模拟支付";
+  if (method === "POINTS") return "积分";
+  return method || "未支付";
+};
+
+const canPay = (order: OrderDTO) => order.status === 0;
+const canRefund = (order: OrderDTO) => order.status === 1;
+
 const editForm = ref({
   nickname: "",
   gender: 0,
@@ -449,6 +513,7 @@ const travelerForm = ref({
   name: "",
   id_card: "",
   phone: "",
+  id_type: 0,
 });
 
 const passwordForm = ref({
@@ -460,6 +525,8 @@ const passwordSaving = ref(false);
 
 const avatarInput = ref<HTMLInputElement | null>(null);
 const avatarUploading = ref(false);
+const refundLoadingOrderNo = ref("");
+const payLoadingOrderNo = ref("");
 
 const triggerAvatarUpload = () => {
   avatarInput.value?.click();
@@ -602,8 +669,44 @@ const fetchOrders = async () => {
   }
 };
 
+const handleRefundOrder = async (order: OrderDTO) => {
+  try {
+    await ElMessageBox.confirm(`确认对订单 ${order.order_no} 发起退款吗？`, "退款确认", {
+      confirmButtonText: "确认退款",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+  } catch {
+    return;
+  }
+
+  refundLoadingOrderNo.value = order.order_no;
+  try {
+    const result = await refundUserOrder(order);
+    ElMessage.success(result.refundRule ? `${result.refundRule}，退款金额：￥${result.refundAmount ?? 0}` : "退款申请成功");
+    await fetchOrders();
+  } catch {
+    ElMessage.error("退款失败，请稍后重试");
+  } finally {
+    refundLoadingOrderNo.value = "";
+  }
+};
+
+const handlePayOrder = async (order: OrderDTO) => {
+  payLoadingOrderNo.value = order.order_no;
+  try {
+    await payUserOrder(order.order_no, "MOCK_PAY");
+    ElMessage.success("支付成功");
+    await fetchOrders();
+  } catch {
+    ElMessage.error("支付失败，请稍后重试");
+  } finally {
+    payLoadingOrderNo.value = "";
+  }
+};
+
 const openCreateTraveler = () => {
-  travelerForm.value = { id: "", name: "", id_card: "", phone: "" };
+  travelerForm.value = { id: "", name: "", id_card: "", phone: "", id_type: 0 };
   travelerDialogOpen.value = true;
 };
 
@@ -611,8 +714,9 @@ const openEditTraveler = (t: TravelerDTO) => {
   travelerForm.value = {
     id: t.id || "",
     name: t.name || "",
-    id_card: t.id_card || "",
+    id_card: t.id_card || t.idCard || "",
     phone: t.phone || "",
+    id_type: t.id_type ?? t.idType ?? 0,
   };
   travelerDialogOpen.value = true;
 };
@@ -630,12 +734,14 @@ const saveTraveler = async () => {
         name: travelerForm.value.name,
         id_card: travelerForm.value.id_card,
         phone: travelerForm.value.phone,
+        id_type: travelerForm.value.id_type,
       });
     } else {
       await addTraveler({
         name: travelerForm.value.name,
         id_card: travelerForm.value.id_card,
         phone: travelerForm.value.phone,
+        id_type: travelerForm.value.id_type,
       });
     }
     travelerDialogOpen.value = false;
@@ -750,15 +856,26 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.profile-page {
-  padding-top: 64px;
-}
-
 /* ── Hero ── */
 .profile-hero {
-  padding: 48px 0;
-  background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
+  padding: 52px 0 44px;
+  background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 60%, var(--navy-600) 100%);
   color: var(--white);
+  position: relative;
+  overflow: hidden;
+}
+.profile-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 25% 40%, rgba(201,149,61,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 75% 60%, rgba(212,122,98,0.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+.profile-hero .container {
+  position: relative;
+  z-index: 1;
 }
 
 .profile-header {
@@ -1048,6 +1165,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.order-actions {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.order-reason {
+  color: var(--cta);
 }
 
 .btn-text.danger {

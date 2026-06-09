@@ -45,12 +45,17 @@ public class HotelController {
         return ApiResponse.ok(hotelService.searchHotels(userId, query));
     }
 
-    @GetMapping("/{hotelId}")
+    @GetMapping("/{hotelId:\\d+}")
     public ApiResponse<HotelVO> getHotel(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable Long hotelId) {
         resolveUserId(authorization);
         return ApiResponse.ok(hotelService.getHotel(hotelId));
+    }
+
+    @GetMapping("/rooms")
+    public ApiResponse<List<?>> noopRooms() {
+        return ApiResponse.ok(List.of());
     }
 
     @GetMapping("/room/{roomId}")

@@ -1,6 +1,6 @@
 <template>
   <div class="module-page">
-    <section class="module-hero">
+    <section class="module-hero module-hero--warm">
       <div class="container hero-inner">
         <span class="module-icon">度假</span>
         <h1 class="section-title">旅游度假</h1>
@@ -121,6 +121,19 @@
         <el-descriptions-item label="单价">￥{{ vacationStore.selectedVacation.price }}</el-descriptions-item>
       </el-descriptions>
       <el-form ref="orderFormRef" :model="orderForm" :rules="orderRules" label-width="96px">
+        <el-form-item label="常用出行人">
+          <el-select v-model="selectedTravelerKey" placeholder="选择后自动填入" clearable @change="fillTraveler">
+            <el-option
+              v-for="traveler in travelers"
+              :key="travelerKey(traveler)"
+              :label="traveler.name"
+              :value="travelerKey(traveler)"
+            >
+              <span>{{ traveler.name }}</span>
+              <span class="traveler-phone">{{ traveler.phone || '' }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="出行人" prop="travelerName">
           <el-input v-model="orderForm.travelerName" maxlength="30" placeholder="请输入出行人姓名" />
         </el-form-item>
@@ -146,6 +159,13 @@
         <el-descriptions-item label="订单号">{{ vacationStore.currentOrder?.orderNo }}</el-descriptions-item>
         <el-descriptions-item label="产品">{{ vacationStore.selectedVacation?.name }}</el-descriptions-item>
         <el-descriptions-item label="金额">￥{{ vacationStore.currentOrder?.payAmount }}</el-descriptions-item>
+        <el-descriptions-item label="支付方式">
+          <el-radio-group v-model="paymentMethod" size="small">
+            <el-radio-button label="WECHAT">微信</el-radio-button>
+            <el-radio-button label="ALIPAY">支付宝</el-radio-button>
+            <el-radio-button label="MOCK_PAY">模拟支付</el-radio-button>
+          </el-radio-group>
+        </el-descriptions-item>
         <el-descriptions-item label="剩余支付时间">
           <el-text type="danger" size="large">{{ countdownText }}</el-text>
         </el-descriptions-item>
@@ -182,9 +202,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { addTraveler, getTravelers, type TravelerDTO } from '@/api/user'
 import {
   cancelVacationOrder,
   createVacationOrder,
@@ -224,6 +245,7 @@ const detailProductName = ref('')
 const detailContent = ref('')
 const assistantTitle = ref('')
 const assistantContent = ref('')
+const paymentMethod = ref<'WECHAT' | 'ALIPAY' | 'MOCK_PAY'>('WECHAT')
 const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
@@ -247,6 +269,8 @@ const searchForm = reactive({
 })
 
 const orderFormRef = ref<FormInstance>()
+const travelers = ref<TravelerDTO[]>([])
+const selectedTravelerKey = ref<string>()
 const orderForm = reactive({
   travelerName: '',
   travelerPhone: '',
@@ -265,6 +289,34 @@ const orderRules: FormRules = {
 
 const availableStock = (item: VacationProduct) => Math.max(0, Number(item.stock || 0) - Number(item.soldCount || 0))
 const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
+
+const travelerKey = (traveler: TravelerDTO) => traveler.id || `${traveler.name}-${traveler.id_card || traveler.idCard || ''}-${traveler.phone || ''}`
+
+const fillTraveler = () => {
+  const traveler = travelers.value.find(item => travelerKey(item) === selectedTravelerKey.value)
+  if (!traveler) return
+  orderForm.travelerName = traveler.name
+  orderForm.travelerPhone = traveler.phone || ''
+}
+
+const saveTravelerIfNeeded = async () => {
+  const travelerName = orderForm.travelerName.trim()
+  const travelerPhone = orderForm.travelerPhone.trim()
+  if (!travelerName || !travelerPhone) return
+  const exists = travelers.value.some(item => item.name === travelerName && item.phone === travelerPhone)
+  if (exists) return
+  try {
+    const saved = await addTraveler({
+      name: travelerName,
+      id_card: `${travelerName}-${travelerPhone}`,
+      phone: travelerPhone,
+      id_type: 0,
+    })
+    travelers.value = [saved, ...travelers.value]
+  } catch {
+    // ignore persistence failure and keep booking flow moving
+  }
+}
 
 const payPreview = computed(() => {
   const product = vacationStore.selectedVacation
@@ -352,10 +404,12 @@ const handleShowDetail = async (product: VacationProduct) => {
 
 const openConfirmDialog = (product: VacationProduct) => {
   vacationStore.setSelectedVacation(product)
+  selectedTravelerKey.value = undefined
   orderForm.travelerName = ''
   orderForm.travelerPhone = ''
   orderForm.travelerCount = 1
   orderForm.cancellationInsurance = false
+  paymentMethod.value = 'WECHAT'
   orderFormRef.value?.clearValidate()
   showConfirmDialog.value = true
 }
@@ -365,6 +419,7 @@ const handleSubmitOrder = async () => {
   if (!valid || !vacationStore.selectedVacation) return
   orderLoading.value = true
   try {
+    await saveTravelerIfNeeded()
     const order = await createVacationOrder({
       productId: vacationStore.selectedVacation.id,
       ...orderForm
@@ -417,7 +472,7 @@ const handlePayOrder = async () => {
   if (!orderNo) return
   payLoading.value = true
   try {
-    const result = await payVacationOrder(orderNo)
+    const result = await payVacationOrder(orderNo, paymentMethod.value)
     vacationStore.setCurrentOrder(result)
     vacationPickupCode.value = result.pickupCode || ''
     showPayDialog.value = false
@@ -509,46 +564,18 @@ const clearTimers = () => {
   pollTimer.value = undefined
 }
 
+onMounted(async () => {
+  try {
+    travelers.value = await getTravelers()
+  } catch {
+    travelers.value = []
+  }
+})
+
 onUnmounted(clearTimers)
 </script>
 
 <style scoped>
-.module-page {
-  padding-top: 64px;
-}
-
-.module-hero {
-  padding: 56px 0 36px;
-  background: linear-gradient(135deg, #2f6f68, #d07b54);
-  color: #fff;
-  text-align: center;
-}
-
-.hero-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-.hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.module-hero .section-title,
-.module-hero .section-subtitle {
-  color: #fff;
-  margin: 0;
-}
-
-.module-icon {
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .module-content {
   padding: 32px 0 60px;
 }
@@ -566,6 +593,12 @@ onUnmounted(clearTimers)
 
 .row-actions :deep(.el-button) {
   margin-left: 0;
+}
+
+.traveler-phone {
+  float: right;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .tag {

@@ -135,8 +135,8 @@ export function createTrainOrder(data: TrainOrderPayload) {
   return http.post<TrainOrderResponse>('/orders/train', data)
 }
 
-export function payOrder(orderNo: string) {
-  return http.post<TrainOrderResponse>(`/orders/train/${orderNo}/pay`)
+export function payOrder(orderNo: string, paymentMethod?: string) {
+  return http.post<TrainOrderResponse>(`/orders/${orderNo}/pay`, { paymentMethod })
 }
 
 export function refundTrainOrder(orderNo: string) {

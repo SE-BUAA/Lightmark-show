@@ -1,5 +1,7 @@
 package top.ortus.lightmark.backend.dto.module;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDateTime;
 
 public class AdminLogDTO {
@@ -68,5 +70,20 @@ public class AdminLogDTO {
 
     public void setCreate_time(LocalDateTime create_time) {
         this.create_time = create_time;
+    }
+
+    @JsonProperty("adminId")
+    public String getAdminId() {
+        return admin_id;
+    }
+
+    @JsonProperty("target")
+    public String getTarget() {
+        return params;
+    }
+
+    @JsonProperty("createTime")
+    public LocalDateTime getCreateTime() {
+        return create_time;
     }
 }

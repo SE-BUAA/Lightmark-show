@@ -14,10 +14,11 @@
         <el-option label="已取消" :value="3" />
         <el-option label="退款中" :value="4" />
       </el-select>
-      <el-button type="primary" @click="loadData">搜索</el-button>
+      <el-button type="primary" @click="handleSearch">搜索</el-button>
       <el-button
         @click="
-          statusFilter = undefined;
+          statusFilter.value = undefined;
+          currentPage.value = 1;
           loadData();
         "
         >重置</el-button
@@ -64,7 +65,18 @@
       </el-table-column>
     </el-table>
 
-    <div class="table-footer" v-if="total > 0">共 {{ total }} 条</div>
+    <div class="table-footer" v-if="total > 0">
+      <span>共 {{ total }} 条</span>
+      <el-pagination
+        v-if="total > pageSize"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        background
+        layout="prev, pager, next, jumper, total"
+        @current-change="loadData"
+      />
+    </div>
 
     <!-- 改状态对话框 -->
     <el-dialog
@@ -137,6 +149,8 @@ import {
 } from "@/api/admin";
 
 const statusFilter = ref<number | undefined>(undefined);
+const currentPage = ref(1);
+const pageSize = 100;
 const loading = ref(false);
 const saving = ref(false);
 const total = ref(0);
@@ -167,12 +181,21 @@ const statusTagType = (status: number): string => {
 const loadData = async () => {
   loading.value = true;
   try {
-    const data = await getAdminOrders(statusFilter.value);
+    const data = await getAdminOrders({
+      status: statusFilter.value,
+      page: currentPage.value,
+      size: pageSize,
+    });
     rows.value = data.list ?? [];
     total.value = data.total ?? 0;
   } finally {
     loading.value = false;
   }
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
+  await loadData();
 };
 
 // ── 改状态 ──

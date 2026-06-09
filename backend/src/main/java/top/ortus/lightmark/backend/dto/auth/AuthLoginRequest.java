@@ -9,6 +9,7 @@ public class AuthLoginRequest {
     private String password;
     @NotBlank
     private String captchaCode;
+    private Boolean privacyAccepted;
 
     public AuthLoginRequest() {
     }
@@ -35,5 +36,13 @@ public class AuthLoginRequest {
 
     public void setCaptchaCode(String captchaCode) {
         this.captchaCode = captchaCode;
+    }
+
+    public Boolean getPrivacyAccepted() {
+        return privacyAccepted;
+    }
+
+    public void setPrivacyAccepted(Boolean privacyAccepted) {
+        this.privacyAccepted = privacyAccepted;
     }
 }

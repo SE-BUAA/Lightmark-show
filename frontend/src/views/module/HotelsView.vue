@@ -1,6 +1,6 @@
 <template>
   <div class="module-page">
-    <section class="module-hero">
+    <section class="module-hero module-hero--warm">
       <div class="container hero-inner">
         <span class="module-icon">酒店住宿</span>
         <h1 class="section-title">酒店住宿</h1>
@@ -15,7 +15,7 @@
     <section class="module-content container">
       <div class="feature-grid">
         <article v-for="item in features" :key="item.title" class="feature-card">
-          <span>{{ item.step }}</span>
+          <span class="step-num">{{ item.step }}</span>
           <h3>{{ item.title }}</h3>
           <p>{{ item.desc }}</p>
         </article>
@@ -62,81 +62,10 @@ const openAiRecommend = () => {
 </script>
 
 <style scoped>
-.module-page {
-  padding-top: 64px;
-}
-
-.module-hero {
-  padding: 56px 0 36px;
-  background: linear-gradient(135deg, #23415f, #4f7a93);
-  color: var(--white);
-  text-align: center;
-}
-
-.hero-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-.module-hero .section-title {
-  color: var(--white);
-  margin: 0;
-}
-
-.module-hero .section-subtitle {
-  color: rgba(255, 255, 255, 0.82);
-  margin: 0;
-  max-width: 680px;
-}
-
-.module-icon {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.module-content {
-  padding: 32px 0 60px;
-}
-
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
-}
-
-.feature-card {
-  padding: 24px;
-  background: var(--white);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.feature-card span {
-  color: var(--gold-500);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.feature-card h3 {
-  font-size: 20px;
-  color: var(--navy-900);
-  margin: 12px 0 8px;
-}
-
-.feature-card p {
-  color: var(--text-secondary);
-  line-height: 1.7;
-  margin: 0;
 }
 
 @media (max-width: 900px) {

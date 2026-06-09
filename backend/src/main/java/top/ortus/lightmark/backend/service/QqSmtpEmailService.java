@@ -7,6 +7,8 @@ import jakarta.mail.Session;
 import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import top.ortus.lightmark.backend.config.lightmarkAuthProperties;
 import top.ortus.lightmark.backend.exception.ApiException;
@@ -16,6 +18,8 @@ import java.util.Properties;
 
 @Service
 public class QqSmtpEmailService {
+
+    private static final Logger log = LoggerFactory.getLogger(QqSmtpEmailService.class);
 
     private final lightmarkAuthProperties authProperties;
 
@@ -72,7 +76,16 @@ public class QqSmtpEmailService {
         } catch (ApiException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ApiException(502, "qq smtp send failed");
+            log.error("QQ SMTP send failed, host={}, port={}, sslEnabled={}, username={}, fromEmail={}, to={}, error={}",
+                    host,
+                    port,
+                    authProperties.getMail().isSslEnabled(),
+                    username,
+                    fromEmail,
+                    email,
+                    ex.getMessage(),
+                    ex);
+            throw new ApiException(502, "qq smtp send failed: " + ex.getMessage());
         }
     }
 

@@ -28,6 +28,8 @@ import java.util.Map;
 @Service
 public class AdminService {
 
+    private static final int ADMIN_PAGE_SIZE = 100;
+
     private final JdbcTemplate jdbcTemplate;
 
     /**
@@ -57,16 +59,12 @@ public class AdminService {
      * 近 7 天交易趋势。
      * @return 趋势数据
      */
-    public DashboardTrendDTO dashboardTrends() {
-        List<String> dates = new ArrayList<>();
-        List<Integer> orderCounts = new ArrayList<>();
-        List<BigDecimal> revenues = new ArrayList<>();
+    public List<DashboardTrendDTO> dashboardTrends() {
+        List<DashboardTrendDTO> items = new ArrayList<>();
         LocalDate today = LocalDate.now();
 
         for (int i = 6; i >= 0; i--) {
             LocalDate day = today.minusDays(i);
-            dates.add(day.toString());
-
             Date sqlDate = Date.valueOf(day);
             Integer count = jdbcTemplate.queryForObject(
                     "select count(*) from `orders` where date(create_time) = ?",
@@ -78,11 +76,14 @@ public class AdminService {
                     BigDecimal.class,
                     sqlDate
             );
-            orderCounts.add(count == null ? 0 : count);
-            revenues.add(revenue == null ? BigDecimal.ZERO : revenue);
+            items.add(new DashboardTrendDTO(
+                    day.toString(),
+                    count == null ? 0 : count,
+                    revenue == null ? BigDecimal.ZERO : revenue
+            ));
         }
 
-        return new DashboardTrendDTO(dates, orderCounts, revenues);
+        return items;
     }
 
     /**
@@ -107,7 +108,7 @@ public class AdminService {
      * @param status 产品状态，可选过滤条件
      * @return 分页的产品列表
      */
-    public PageResponse<AdminProductDTO> listProducts(String productType, String name, Integer status) {
+    public PageResponse<AdminProductDTO> listProducts(String productType, String name, Integer status, Integer page) {
         StringBuilder baseSql = new StringBuilder(" from product where 1 = 1");
         List<Object> params = new ArrayList<>();
         if (productType != null && !productType.isBlank()) {
@@ -122,13 +123,18 @@ public class AdminService {
             baseSql.append(" and status = ?");
             params.add(status);
         }
+        int currentPage = normalizePage(page);
+        int offset = (currentPage - 1) * ADMIN_PAGE_SIZE;
         Long total = jdbcTemplate.queryForObject("select count(*)" + baseSql, Long.class, params.toArray());
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(ADMIN_PAGE_SIZE);
+        pageParams.add(offset);
         List<AdminProductDTO> items = jdbcTemplate.query(
-                "select *" + baseSql + " order by id",
+                "select *" + baseSql + " order by id limit ? offset ?",
                 new BeanPropertyRowMapper<>(AdminProductDTO.class),
-                params.toArray()
+                pageParams.toArray()
         );
-        return new PageResponse<>(total == null ? 0 : total, items);
+        return new PageResponse<>(total == null ? 0 : total, currentPage, ADMIN_PAGE_SIZE, items);
     }
 
     /**
@@ -227,7 +233,7 @@ public class AdminService {
     /**
      * 获取用户列表。
      */
-    public PageResponse<UserDTO> listUsers(String keyword, Integer status) {
+    public PageResponse<UserDTO> listUsers(String keyword, Integer status, Integer page) {
         StringBuilder baseSql = new StringBuilder(" from `user` where deleted = 0");
         List<Object> params = new ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
@@ -241,14 +247,19 @@ public class AdminService {
             baseSql.append(" and status = ?");
             params.add(status);
         }
+        int currentPage = normalizePage(page);
+        int offset = (currentPage - 1) * ADMIN_PAGE_SIZE;
         Long total = jdbcTemplate.queryForObject("select count(*)" + baseSql, Long.class, params.toArray());
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(ADMIN_PAGE_SIZE);
+        pageParams.add(offset);
         List<UserDTO> items = jdbcTemplate.query(
                 "select id, phone, email, nickname, points, level, status, deleted, create_time, update_time" +
-                        baseSql + " order by id",
+                        baseSql + " order by id limit ? offset ?",
                 new BeanPropertyRowMapper<>(UserDTO.class),
-                params.toArray()
+                pageParams.toArray()
         );
-        return new PageResponse<>(total == null ? 0 : total, items);
+        return new PageResponse<>(total == null ? 0 : total, currentPage, ADMIN_PAGE_SIZE, items);
     }
 
     /**
@@ -288,20 +299,25 @@ public class AdminService {
     /**
      * 获取订单列表。
      */
-    public PageResponse<AdminOrderDTO> listOrders(Integer status) {
+    public PageResponse<AdminOrderDTO> listOrders(Integer status, Integer page) {
         StringBuilder baseSql = new StringBuilder(" from `orders`");
         List<Object> params = new ArrayList<>();
         if (status != null) {
             baseSql.append(" where status = ?");
             params.add(status);
         }
+        int currentPage = normalizePage(page);
+        int offset = (currentPage - 1) * ADMIN_PAGE_SIZE;
         Long total = jdbcTemplate.queryForObject("select count(*)" + baseSql, Long.class, params.toArray());
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(ADMIN_PAGE_SIZE);
+        pageParams.add(offset);
         List<AdminOrderDTO> items = jdbcTemplate.query(
-                "select *" + baseSql + " order by id",
+                "select *" + baseSql + " order by id limit ? offset ?",
                 new BeanPropertyRowMapper<>(AdminOrderDTO.class),
-                params.toArray()
+                pageParams.toArray()
         );
-        return new PageResponse<>(total == null ? 0 : total, items);
+        return new PageResponse<>(total == null ? 0 : total, currentPage, ADMIN_PAGE_SIZE, items);
     }
 
     /**
@@ -368,16 +384,37 @@ public class AdminService {
             }
             if (params.containsKey("result") && params.get("result") != null && !params.get("result").isBlank()) {
                 baseSql.append(" and result = ?");
-                values.add(params.get("result"));
+                values.add(params.get("result").toLowerCase());
             }
         }
+        int currentPage = normalizePage(parsePage(params));
+        int offset = (currentPage - 1) * ADMIN_PAGE_SIZE;
         Long total = jdbcTemplate.queryForObject("select count(*)" + baseSql, Long.class, values.toArray());
+        List<Object> pageParams = new ArrayList<>(values);
+        pageParams.add(ADMIN_PAGE_SIZE);
+        pageParams.add(offset);
         List<AdminLogDTO> items = jdbcTemplate.query(
-                "select *" + baseSql + " order by id desc",
+                "select *" + baseSql + " order by id desc limit ? offset ?",
                 new BeanPropertyRowMapper<>(AdminLogDTO.class),
-                values.toArray()
+                pageParams.toArray()
         );
-        return new PageResponse<>(total == null ? 0 : total, items);
+        return new PageResponse<>(total == null ? 0 : total, currentPage, ADMIN_PAGE_SIZE, items);
+    }
+
+    private int normalizePage(Integer page) {
+        return page == null || page < 1 ? 1 : page;
+    }
+
+    private Integer parsePage(Map<String, String> params) {
+        if (params == null) {
+            return null;
+        }
+        try {
+            String value = params.get("page");
+            return value == null || value.isBlank() ? null : Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     /**

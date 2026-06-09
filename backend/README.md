@@ -208,6 +208,11 @@ spring:
   sql:
     init:
       mode: never
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 20260611
 
 server:
   # 服务器端口配置

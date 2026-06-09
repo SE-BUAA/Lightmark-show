@@ -201,6 +201,7 @@
         />
       </div>
       <el-empty v-else-if="hasSearched && !searchLoading" :description="activeMode === 'direct' ? '未找到符合条件的车次' : '未找到符合条件的中转方案'" />
+      <el-empty v-else-if="!hasRouteSelected()" description="请选择车站" />
       <el-empty v-else description="正在加载可用车次" />
     </section>
 
@@ -218,6 +219,19 @@
 
     <el-dialog v-model="showOrderDialog" title="填写购票人信息" width="520px">
       <el-form ref="orderFormRef" :model="orderForm" :rules="orderRules" label-width="90px">
+        <el-form-item label="常用出行人">
+          <el-select v-model="selectedTravelerKey" placeholder="选择后自动填入" clearable @change="fillTraveler">
+            <el-option
+              v-for="traveler in travelers"
+              :key="travelerKey(traveler)"
+              :label="traveler.name"
+              :value="travelerKey(traveler)"
+            >
+              <span>{{ traveler.name }}</span>
+              <span class="traveler-phone">{{ traveler.phone || '' }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="姓名" prop="passengerName">
           <el-input v-model="orderForm.passengerName" maxlength="20" placeholder="2-20个汉字" />
         </el-form-item>
@@ -269,6 +283,13 @@
         <el-descriptions-item label="订单号">{{ trainStore.currentOrder?.orderNo }}</el-descriptions-item>
         <el-descriptions-item label="车次">{{ trainStore.selectedTrain?.name }}</el-descriptions-item>
         <el-descriptions-item label="金额">¥{{ trainStore.currentOrder?.payAmount }}</el-descriptions-item>
+        <el-descriptions-item label="支付方式">
+          <el-radio-group v-model="paymentMethod" size="small">
+            <el-radio-button label="WECHAT">微信</el-radio-button>
+            <el-radio-button label="ALIPAY">支付宝</el-radio-button>
+            <el-radio-button label="MOCK_PAY">模拟支付</el-radio-button>
+          </el-radio-group>
+        </el-descriptions-item>
         <el-descriptions-item label="剩余支付时间">
           <el-text type="danger" size="large">{{ countdownText }}</el-text>
         </el-descriptions-item>
@@ -294,6 +315,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { addTraveler, getTravelers, type TravelerDTO } from '@/api/user'
 import {
   cancelOrder,
   changeTrainOrder,
@@ -340,6 +362,7 @@ const refundPickupCode = ref('')
 const changePickupCode = ref('')
 const changePreview = ref<TrainChangePreviewResponse | null>(null)
 const changeResult = ref<TrainChangeResponse | null>(null)
+const paymentMethod = ref<'WECHAT' | 'ALIPAY' | 'MOCK_PAY'>('WECHAT')
 const countdownSeconds = ref(0)
 const timer = ref<number>()
 const pollTimer = ref<number>()
@@ -363,6 +386,8 @@ const searchForm = reactive({
 })
 
 const orderFormRef = ref<FormInstance>()
+const travelers = ref<TravelerDTO[]>([])
+const selectedTravelerKey = ref<string>()
 const orderForm = reactive({
   passengerName: '',
   passengerPhone: '',
@@ -401,6 +426,34 @@ const orderRules: FormRules = {
       trigger: 'change'
     }
   ]
+}
+
+const travelerKey = (traveler: TravelerDTO) => traveler.id || `${traveler.name}-${traveler.id_card || traveler.idCard || ''}-${traveler.phone || ''}`
+
+const fillTraveler = () => {
+  const traveler = travelers.value.find(item => travelerKey(item) === selectedTravelerKey.value)
+  if (!traveler) return
+  orderForm.passengerName = traveler.name
+  orderForm.passengerPhone = traveler.phone || ''
+}
+
+const saveTravelerIfNeeded = async () => {
+  const passengerName = orderForm.passengerName.trim()
+  const passengerPhone = orderForm.passengerPhone.trim()
+  if (!passengerName || !passengerPhone) return
+  const exists = travelers.value.some(item => item.name === passengerName && item.phone === passengerPhone)
+  if (exists) return
+  try {
+    const saved = await addTraveler({
+      name: passengerName,
+      id_card: `${passengerName}-${passengerPhone}`,
+      phone: passengerPhone,
+      id_type: 0,
+    })
+    travelers.value = [saved, ...travelers.value]
+  } catch {
+    // ignore persistence failure and keep booking flow moving
+  }
 }
 
 const routeSummary = computed(() => {
@@ -652,6 +705,7 @@ const handleChangeTrain = async (train: TrainProduct) => {
 
 const openOrderDialog = (train: TrainProduct) => {
   trainStore.setSelectedTrain(train)
+  selectedTravelerKey.value = undefined
   orderForm.passengerName = ''
   orderForm.passengerPhone = ''
   orderForm.passengerAge = 25
@@ -662,6 +716,7 @@ const openOrderDialog = (train: TrainProduct) => {
     segments[1] ? availableSeatNames(segments[1])[0] || '' : ''
   ]
   orderForm.isStudent = false
+  paymentMethod.value = 'WECHAT'
   orderFormRef.value?.clearValidate()
   showOrderDialog.value = true
 }
@@ -672,6 +727,7 @@ const handleSubmitOrder = async () => {
 
   orderLoading.value = true
   try {
+    await saveTravelerIfNeeded()
     const order = await createTrainOrder({
       productId: trainStore.selectedTrain.id,
       passengerName: orderForm.passengerName,
@@ -731,7 +787,7 @@ const handlePayOrder = async () => {
   if (!orderNo) return
   payLoading.value = true
   try {
-    const result = await payOrder(orderNo)
+    const result = await payOrder(orderNo, paymentMethod.value)
     trainStore.setCurrentOrder(result)
     showPayDialog.value = false
     showTicketDialog.value = true
@@ -805,6 +861,11 @@ watch(
 )
 
 onMounted(async () => {
+  try {
+    travelers.value = await getTravelers()
+  } catch {
+    travelers.value = []
+  }
   await loadOptions()
   await refreshTrainData()
 })
@@ -813,46 +874,6 @@ onUnmounted(clearTimers)
 </script>
 
 <style scoped>
-.module-page {
-  padding-top: 64px;
-}
-
-.module-hero {
-  padding: 56px 0 36px;
-  background: linear-gradient(135deg, #23415f, #4f7a93);
-  color: #fff;
-  text-align: center;
-}
-
-.hero-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-.hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.module-hero .section-title {
-  color: #fff;
-  margin: 0;
-}
-
-.module-hero .section-subtitle {
-  color: rgba(255, 255, 255, 0.82);
-  margin: 0;
-}
-
-.module-icon {
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .module-content {
   padding: 32px 0 60px;
   display: flex;
@@ -1041,6 +1062,12 @@ onUnmounted(clearTimers)
 
 .change-alert {
   margin-bottom: 16px;
+}
+
+.traveler-phone {
+  float: right;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {

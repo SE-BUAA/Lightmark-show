@@ -63,6 +63,7 @@ public class AuthService {
     public UserDTO register(AuthRegisterRequest request, HttpSession session) {
         authValidationService.validateRegistrationRequest(request);
         captchaService.verifyOrThrow(request.getCaptchaCode(), session);
+        ensurePrivacyAccepted(request.getPrivacyAccepted(), "注册前请先阅读并同意隐私政策");
 
         String email = authValidationService.normalizeAndValidateEmail(request.getEmail());
         String nickname = authValidationService.normalizeNickname(request.getNickname());
@@ -94,6 +95,7 @@ public class AuthService {
 
         userRepositoryImpl.insert(user);
         User created = userRepositoryImpl.findByEmail(email);
+        userRepositoryImpl.assignRole(created.getId(), 2);
         return UserConverter.toDto(created);
     }
 
@@ -103,6 +105,7 @@ public class AuthService {
     public AuthTokenDTO login(AuthLoginRequest request, HttpSession session, HttpServletRequest httpRequest) {
         authValidationService.validateLoginRequest(request);
         captchaService.verifyOrThrow(request.getCaptchaCode(), session);
+        ensurePrivacyAccepted(request.getPrivacyAccepted(), "登录前请先阅读并同意隐私政策");
 
         User user = authValidationService.findLoginUser(request.getAccount());
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -129,5 +132,11 @@ public class AuthService {
             return forwarded.split(",")[0].trim();
         }
         return request.getRemoteAddr();
+    }
+
+    private void ensurePrivacyAccepted(Boolean privacyAccepted, String message) {
+        if (!Boolean.TRUE.equals(privacyAccepted)) {
+            throw new ApiException(400, message);
+        }
     }
 }

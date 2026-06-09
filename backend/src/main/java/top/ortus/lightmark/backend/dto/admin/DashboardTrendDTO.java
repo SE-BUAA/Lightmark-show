@@ -1,43 +1,42 @@
 package top.ortus.lightmark.backend.dto.admin;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 public class DashboardTrendDTO {
-    private List<String> dates;
-    private List<Integer> orderCounts;
-    private List<BigDecimal> revenues;
+    private String date;
+    private int orderCount;
+    private BigDecimal revenue;
 
     public DashboardTrendDTO() {
     }
 
-    public DashboardTrendDTO(List<String> dates, List<Integer> orderCounts, List<BigDecimal> revenues) {
-        this.dates = dates;
-        this.orderCounts = orderCounts;
-        this.revenues = revenues;
+    public DashboardTrendDTO(String date, int orderCount, BigDecimal revenue) {
+        this.date = date;
+        this.orderCount = orderCount;
+        this.revenue = revenue;
     }
 
-    public List<String> getDates() {
-        return dates;
+    public String getDate() {
+        return date;
     }
 
-    public void setDates(List<String> dates) {
-        this.dates = dates;
+    public void setDate(String date) {
+        this.date = date;
     }
 
-    public List<Integer> getOrderCounts() {
-        return orderCounts;
+    public int getOrderCount() {
+        return orderCount;
     }
 
-    public void setOrderCounts(List<Integer> orderCounts) {
-        this.orderCounts = orderCounts;
+    public void setOrderCount(int orderCount) {
+        this.orderCount = orderCount;
     }
 
-    public List<BigDecimal> getRevenues() {
-        return revenues;
+    public BigDecimal getRevenue() {
+        return revenue;
     }
 
-    public void setRevenues(List<BigDecimal> revenues) {
-        this.revenues = revenues;
+    public void setRevenue(BigDecimal revenue) {
+        this.revenue = revenue;
     }
 }

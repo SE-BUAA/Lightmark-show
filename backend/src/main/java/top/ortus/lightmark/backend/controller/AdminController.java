@@ -71,7 +71,7 @@ public class AdminController {
     }
 
     @GetMapping("/dashboard/trends")
-    public ApiResponse<DashboardTrendDTO> dashboardTrends() {
+    public ApiResponse<List<DashboardTrendDTO>> dashboardTrends() {
         return ApiResponse.ok(adminService.dashboardTrends());
     }
 
@@ -82,8 +82,9 @@ public class AdminController {
 
     @GetMapping("/users")
     public ApiResponse<PageResponse<UserDTO>> listUsers(@RequestParam(required = false) String keyword,
-                                                        @RequestParam(required = false) Integer status) {
-        return ApiResponse.ok(adminService.listUsers(keyword, status));
+                                                        @RequestParam(required = false) Integer status,
+                                                        @RequestParam(required = false) Integer page) {
+        return ApiResponse.ok(adminService.listUsers(keyword, status, page));
     }
 
     @PutMapping("/users/{id}/status")
@@ -103,8 +104,9 @@ public class AdminController {
     @GetMapping("/products")
     public ApiResponse<PageResponse<AdminProductDTO>> listProducts(@RequestParam(required = false) String productType,
                                                                     @RequestParam(required = false) String name,
-                                                                    @RequestParam(required = false) Integer status) {
-        return ApiResponse.ok(adminService.listProducts(productType, name, status));
+                                                                    @RequestParam(required = false) Integer status,
+                                                                    @RequestParam(required = false) Integer page) {
+        return ApiResponse.ok(adminService.listProducts(productType, name, status, page));
     }
 
     @PutMapping("/products/{id}/status")
@@ -153,8 +155,9 @@ public class AdminController {
     }
 
     @GetMapping("/orders")
-    public ApiResponse<PageResponse<AdminOrderDTO>> listOrders(@RequestParam(required = false) Integer status) {
-        return ApiResponse.ok(adminService.listOrders(status));
+    public ApiResponse<PageResponse<AdminOrderDTO>> listOrders(@RequestParam(required = false) Integer status,
+                                                               @RequestParam(required = false) Integer page) {
+        return ApiResponse.ok(adminService.listOrders(status, page));
     }
 
     @PutMapping("/orders/{orderNo}/status")
@@ -172,7 +175,11 @@ public class AdminController {
     }
 
     @GetMapping("/logs")
-    public ApiResponse<PageResponse<AdminLogDTO>> logs(@RequestParam Map<String, String> params) {
+    public ApiResponse<PageResponse<AdminLogDTO>> logs(@RequestParam Map<String, String> params,
+                                                       @RequestParam(required = false) Integer page) {
+        if (page != null) {
+            params.put("page", String.valueOf(page));
+        }
         return ApiResponse.ok(adminService.listAdminLogs(params));
     }
 
