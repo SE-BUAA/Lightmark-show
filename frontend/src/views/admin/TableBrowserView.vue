@@ -20,7 +20,7 @@
         <el-option label="成功" value="SUCCESS" />
         <el-option label="失败" value="FAIL" />
       </el-select>
-      <el-button type="primary" @click="loadData">搜索</el-button>
+      <el-button type="primary" @click="handleSearch">搜索</el-button>
       <el-button @click="resetSearch">重置</el-button>
     </div>
 
@@ -48,7 +48,18 @@
       <el-table-column prop="createTime" label="操作时间" width="180" />
     </el-table>
 
-    <div class="table-footer" v-if="total > 0">共 {{ total }} 条</div>
+    <div class="table-footer" v-if="total > 0">
+      <span>共 {{ total }} 条</span>
+      <el-pagination
+        v-if="total > pageSize"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        background
+        layout="prev, pager, next, jumper, total"
+        @current-change="loadData"
+      />
+    </div>
     <div v-else-if="!loading" class="empty-hint">暂无操作日志</div>
   </div>
 </template>
@@ -60,6 +71,8 @@ import { getAdminLogs, AdminLogDTO } from "@/api/admin";
 const loading = ref(false);
 const total = ref(0);
 const rows = ref<AdminLogDTO[]>([]);
+const currentPage = ref(1);
+const pageSize = 100;
 
 const filter = reactive({
   operation: "",
@@ -72,6 +85,8 @@ const loadData = async () => {
     const data = await getAdminLogs({
       operation: filter.operation || undefined,
       result: filter.result || undefined,
+      page: currentPage.value,
+      size: pageSize,
     });
     rows.value = data.list ?? [];
     total.value = data.total ?? 0;
@@ -83,7 +98,13 @@ const loadData = async () => {
 const resetSearch = () => {
   filter.operation = "";
   filter.result = "";
+  currentPage.value = 1;
   loadData();
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
+  await loadData();
 };
 
 onMounted(loadData);

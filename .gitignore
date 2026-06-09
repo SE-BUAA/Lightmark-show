@@ -1,4 +1,9 @@
 /.idea
 frontend/API.md
-
-
+.vscode
+.claude
+.history
+.env
+package-project.ps1
+lightmark.tar.gz
+uninstall-server.sh

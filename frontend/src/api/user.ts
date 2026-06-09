@@ -16,6 +16,8 @@ export interface UserCurrentDTO {
   email: string;
   nickname: string;
   avatar: string;
+  gender?: number;
+  birth_date?: string;
   points: number;
   level: number;
   identity: string;
@@ -28,41 +30,75 @@ export interface UserUpdateRequest {
   nickname?: string;
   phone?: string;
   email?: string;
+  gender?: number;
+  birth_date?: string;
 }
 
 /** 出行人DTO */
 export interface TravelerDTO {
-  id?: number;
+  id?: string;
   name: string;
-  idCard: string;
+  id_card: string;
+  idCard?: string;
   phone?: string;
+  id_type?: number;
+  idType?: number;
+  create_time?: string;
 }
 
 /** 积分记录DTO */
 export interface PointsLogDTO {
-  id: number;
-  points: number;
-  type: string;
-  remark: string;
-  createTime: string;
+  id: string;
+  user_id?: string;
+  type: number;
+  amount: number;
+  source?: string;
+  order_id?: string;
+  create_time?: string;
 }
 
 /** 等级升级信息DTO */
 export interface UserLevelUpgradeInfoDTO {
-  currentLevel: number;
-  currentPoints: number;
-  nextLevel: number;
-  pointsToNext: number;
+  level: number;
+  pointsNeeded: number;
+  benefits: string[];
 }
 
 /** 订单DTO（概要） */
 export interface OrderDTO {
-  orderNo: string;
-  orderType: string;
-  productName: string;
-  payAmount: number;
+  id?: string;
+  order_no: string;
+  user_id?: string;
+  order_type: string;
+  total_amount?: number;
+  points_deduct?: number;
+  pay_amount: number;
+  payment_method?: string;
+  source?: string;
   status: number;
-  createTime: string;
+  pay_deadline?: string;
+  pay_time?: string;
+  cancel_reason?: string;
+  create_time?: string;
+  update_time?: string;
+}
+
+export interface RefundResultDTO {
+  orderNo: string;
+  status: number;
+  statusText?: string;
+  paidAmount?: number;
+  refundAmount?: number;
+  refundRule?: string;
+}
+
+export interface PayResultDTO {
+  orderNo: string;
+  status: number;
+  payAmount?: number;
+  pickupCode?: string;
+  expireTime?: string;
+  paymentMethod?: string;
 }
 
 /** 分页响应 */
@@ -101,6 +137,16 @@ export const updateAvatar = (
   return http.post<{ avatarUrl: string }>("/user/avatar", { avatarUrl });
 };
 
+export const uploadAvatarFile = (
+  file: File
+): Promise<{ avatarUrl: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return http.post<{ avatarUrl: string }>("/user/avatar/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 /**
  * 修改密码
  * PUT /api/user/password
@@ -119,7 +165,15 @@ export const changePassword = (data: {
  * GET /api/user/travelers
  */
 export const getTravelers = (): Promise<TravelerDTO[]> => {
-  return http.get<TravelerDTO[]>("/user/travelers");
+  return http.get<TravelerDTO[]>("/user/travelers").then((list) =>
+    (list || []).map((item) => ({
+      ...item,
+      idCard: item.idCard || item.id_card,
+      idType: item.idType ?? item.id_type,
+      id_card: item.id_card || item.idCard || "",
+      id_type: item.id_type ?? item.idType ?? 0,
+    }))
+  );
 };
 
 /**
@@ -127,7 +181,11 @@ export const getTravelers = (): Promise<TravelerDTO[]> => {
  * POST /api/user/travelers
  */
 export const addTraveler = (data: TravelerDTO): Promise<TravelerDTO> => {
-  return http.post<TravelerDTO>("/user/travelers", data);
+  return http.post<TravelerDTO>("/user/travelers", {
+    ...data,
+    id_card: data.id_card || data.idCard || "",
+    id_type: data.id_type ?? data.idType ?? 0,
+  });
 };
 
 /**
@@ -135,10 +193,14 @@ export const addTraveler = (data: TravelerDTO): Promise<TravelerDTO> => {
  * PUT /api/user/travelers/{id}
  */
 export const updateTraveler = (
-  id: number,
+  id: number | string,
   data: TravelerDTO
 ): Promise<TravelerDTO> => {
-  return http.put<TravelerDTO>(`/user/travelers/${id}`, data);
+  return http.put<TravelerDTO>(`/user/travelers/${id}`, {
+    ...data,
+    id_card: data.id_card || data.idCard || "",
+    id_type: data.id_type ?? data.idType ?? 0,
+  });
 };
 
 /**
@@ -183,4 +245,24 @@ export const getUserOrders = (): Promise<PageResponse<OrderDTO>> => {
  */
 export const getOrderDetail = (orderNo: string): Promise<OrderDTO> => {
   return http.get<OrderDTO>(`/user/orders/${orderNo}`);
+};
+
+export const refundUserOrder = (
+  order: Pick<OrderDTO, "order_no" | "order_type">
+): Promise<RefundResultDTO> => {
+  const orderType = String(order.order_type || "").toUpperCase();
+  if (orderType === "TRAIN") {
+    return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+  }
+  if (orderType === "VACATION") {
+    return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+  }
+  return http.post<RefundResultDTO>(`/user/orders/${order.order_no}/refund`);
+};
+
+export const payUserOrder = (
+  orderNo: string,
+  paymentMethod: string
+): Promise<PayResultDTO> => {
+  return http.post<PayResultDTO>(`/orders/${orderNo}/pay`, { paymentMethod });
 };

@@ -86,6 +86,13 @@ const summary = reactive({
 
 const hotProducts = ref<HotProductDTO[]>([]);
 
+const chartTooltipValueFormatter = (seriesName: string, value: number | string) => {
+  if (typeof value !== "number") {
+    return String(value);
+  }
+  return seriesName === "订单数" ? `${Math.round(value)} 单` : `￥${value.toFixed(2)}`;
+};
+
 const renderChart = (trends: DashboardTrendDTO[]) => {
   if (!chartRef.value) return;
 
@@ -95,8 +102,8 @@ const renderChart = (trends: DashboardTrendDTO[]) => {
   chart.setOption({
     tooltip: {
       trigger: "axis",
-      valueFormatter: (v: number) =>
-        typeof v === "number" ? `￥${v.toFixed(2)}` : String(v),
+      valueFormatter: (value: number | string, _dataIndex: number, params: { seriesName?: string }) =>
+        chartTooltipValueFormatter(params?.seriesName || "", value),
     },
     legend: { data: ["订单数", "营收"] },
     grid: { left: 50, right: 20, bottom: 20, top: 40 },
@@ -105,13 +112,33 @@ const renderChart = (trends: DashboardTrendDTO[]) => {
       data: safeTrends.map((t) => t.date),
       axisLabel: { fontSize: 12 },
     },
-    yAxis: [{ type: "value" }, { type: "value", splitLine: { show: false } }],
+    yAxis: [
+      {
+        type: "value",
+        name: "订单数",
+        minInterval: 1,
+        axisLabel: {
+          formatter: (value: number) => `${Math.round(value)}`,
+        },
+      },
+      {
+        type: "value",
+        name: "营收",
+        splitLine: { show: false },
+        axisLabel: {
+          formatter: (value: number) => `￥${value.toFixed(0)}`,
+        },
+      },
+    ],
     series: [
       {
         name: "订单数",
         type: "bar",
-        data: safeTrends.map((t) => t.orderCount),
+        data: safeTrends.map((t) => Math.round(t.orderCount ?? 0)),
         itemStyle: { color: "#409eff" },
+        tooltip: {
+          valueFormatter: (value: number | string) => chartTooltipValueFormatter("订单数", value),
+        },
       },
       {
         name: "营收",
@@ -122,6 +149,9 @@ const renderChart = (trends: DashboardTrendDTO[]) => {
         lineStyle: { color: "#c9953d", width: 2 },
         itemStyle: { color: "#c9953d" },
         areaStyle: { color: "rgba(201,149,61,0.12)" },
+        tooltip: {
+          valueFormatter: (value: number | string) => chartTooltipValueFormatter("营收", value),
+        },
       },
     ],
   });
@@ -131,23 +161,35 @@ const resizeChart = () => chart?.resize();
 
 onMounted(async () => {
   loading.value = true;
+
+  // 逐个请求，互不阻塞；某个接口失败不影响其他数据展示
   try {
-    const [summaryData, trends, hot] = await Promise.all([
-      getDashboardSummary(),
-      getDashboardTrends(),
-      getHotProducts(),
-    ]);
+    const summaryData = await getDashboardSummary();
     summary.totalUsers = summaryData.totalUsers ?? 0;
     summary.totalOrders = summaryData.totalOrders ?? 0;
     summary.totalRevenue = summaryData.totalRevenue ?? 0;
-    hotProducts.value = hot ?? [];
+  } catch {
+    // 概要接口失败，保持默认值 0
+  }
 
+  try {
+    const trends = await getDashboardTrends();
     await nextTick();
     renderChart(trends ?? []);
-    window.addEventListener("resize", resizeChart);
-  } finally {
-    loading.value = false;
+  } catch {
+    // 趋势接口失败，不渲染图表
   }
+
+  window.addEventListener("resize", resizeChart);
+
+  try {
+    const hot = await getHotProducts();
+    hotProducts.value = hot ?? [];
+  } catch {
+    // 热门产品接口失败，展示「暂无数据」
+  }
+
+  loading.value = false;
 });
 
 onBeforeUnmount(() => {

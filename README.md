@@ -10,17 +10,23 @@
 
 ## 📖 目录
 
-- [项目简介](#项目简介)
-- [技术栈](#技术栈)
-- [核心功能模块](#核心功能模块)
-- [工程结构](#工程结构)
-- [快速开始](#快速开始)
-- [数据库设计](#数据库设计)
-- [API 文档](#api-文档)
-- [AI 集成](#ai-集成)
-- [Skill 提示词](#skill-提示词)
-- [部署架构](#部署架构)
-- [贡献与许可](#贡献与许可)
+- [拾光旅行 Lightmark](#拾光旅行-lightmark)
+  - [📖 目录](#-目录)
+  - [项目简介](#项目简介)
+  - [技术栈](#技术栈)
+  - [核心功能模块](#核心功能模块)
+  - [工程结构](#工程结构)
+    - [前端 (Vue 3)](#前端-vue-3)
+    - [后端 (Spring Boot)](#后端-spring-boot)
+  - [快速开始](#快速开始)
+    - [前置要求](#前置要求)
+    - [1. 克隆仓库](#1-克隆仓库)
+    - [2. 配置数据库](#2-配置数据库)
+    - [3. 启动后端](#3-启动后端)
+    - [4. 启动前端](#4-启动前端)
+    - [5. 访问应用](#5-访问应用)
+  - [AI 集成](#ai-集成)
+  - [Skill 提示词](#skill-提示词)
 
 ## 项目简介
 
@@ -84,7 +90,7 @@ frontend/
 ### 后端 (Spring Boot)  
 
 backend/  
-├── src/main/java/top/ortus/timemark/backend/  
+├── src/main/java/top/ortus/lightmark/backend/  
 │   ├── controller/       # REST 控制器（Auth/User/Admin/Crud/Module）  
 │   ├── service/          # 业务逻辑  
 │   ├── dao/              # MyBatis-Plus Mapper + 实体  
@@ -92,6 +98,7 @@ backend/
 │   ├── config/           # WebConfig、数据库属性配置  
 │   ├── security/         # JWT、AdminAuthInterceptor  
 │   ├── exception/        # 全局异常处理  
+│   ├── tools/        # ai工具调用  
 │   └── converter/        # 实体-DTO 转换  
 └── resources/            # application.yaml, SQL 脚本  
 
@@ -139,9 +146,10 @@ npm run serve
 ### 5. 访问应用
 
 - 用户端：`http://localhost:8081`
-- 管理后台：`http://localhost:8081/admin/login`（默认管理员账号 `admin@lightmark.com` / `123456`）
+- 管理后台：`http://localhost:8081/admin/login`（默认管理员账号 `aaa` / `aaa`）
 
-## AI 集成
+## AI 集成  
+AI配置：在你的本地环境变量配置DEEP_API_KEY，在https://platform.deepseek.com/生成api输入即可
 
 ## Skill 提示词
 

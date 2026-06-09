@@ -28,36 +28,85 @@ const routes: Array<RouteRecordRaw> = [
     path: "/flights",
     name: "flights",
     component: () => import("@/views/module/FlightsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/hotels",
     name: "hotels",
     component: () => import("@/views/module/HotelsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotels/search",
+    name: "HotelSearch",
+    component: () => import("@/views/hotel/HotelSearch.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotel/search",
+    redirect: "/hotels/search",
+  },
+  {
+    path: "/hotels/detail/:hotelId",
+    name: "HotelDetail",
+    component: () => import("@/views/hotel/HotelDetail.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotels/payment/:orderId",
+    name: "HotelPayment",
+    component: () => import("@/views/hotel/HotelPayment.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotels/orders",
+    name: "HotelOrders",
+    component: () => import("@/views/hotel/HotelOrders.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/hotel/detail/:hotelId",
+    redirect: (to) => ({
+      path: `/hotels/detail/${to.params.hotelId}`,
+      query: to.query,
+    }),
   },
   {
     path: "/trains",
     name: "trains",
     component: () => import("@/views/module/TrainsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/vacations",
     name: "vacations",
     component: () => import("@/views/module/VacationsView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/itinerary",
     name: "itinerary",
     component: () => import("@/views/module/ItineraryView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/community",
     name: "community",
     component: () => import("@/views/module/CommunityView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/user-center",
     name: "user-center",
     component: () => import("@/views/module/UserCenterView.vue"),
+    // 需要登录后访问
+    meta: { requiresAuth: true },
   },
   {
     path: "/admin/login",
@@ -121,6 +170,11 @@ const routes: Array<RouteRecordRaw> = [
     // 当访问此路由时才懒加载
     component: () =>
       import(/* webpackChunkName: "about" */ "../views/AboutView.vue"),
+  },
+  {
+    path: "/privacy-policy",
+    name: "privacy-policy",
+    component: () => import("@/views/PrivacyPolicyView.vue"),
   },
 ];
 

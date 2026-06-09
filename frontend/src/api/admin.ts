@@ -126,6 +126,8 @@ export const getHotProducts = (): Promise<HotProductDTO[]> => {
 export const getAdminUsers = (params?: {
   keyword?: string;
   status?: number;
+  page?: number;
+  size?: number;
 }): Promise<PageResponse<UserDTO>> => {
   return http.get<PageResponse<UserDTO>>("/admin/users", { params });
 };
@@ -155,6 +157,8 @@ export const getAdminProducts = (params?: {
   productType?: string;
   name?: string;
   status?: number;
+  page?: number;
+  size?: number;
 }): Promise<PageResponse<AdminProductDTO>> => {
   return http.get<PageResponse<AdminProductDTO>>("/admin/products", { params });
 };
@@ -200,12 +204,12 @@ export const deleteProduct = (id: number): Promise<boolean> => {
 // ═══════════════════════════════════════════════════════
 
 /** GET /api/admin/orders — 订单列表 */
-export const getAdminOrders = (
-  status?: number
-): Promise<PageResponse<AdminOrderDTO>> => {
-  return http.get<PageResponse<AdminOrderDTO>>("/admin/orders", {
-    params: { status },
-  });
+export const getAdminOrders = (params?: {
+  status?: number;
+  page?: number;
+  size?: number;
+}): Promise<PageResponse<AdminOrderDTO>> => {
+  return http.get<PageResponse<AdminOrderDTO>>("/admin/orders", { params });
 };
 
 /** PUT /api/admin/orders/{orderNo}/status — 强制修改订单状态 */
@@ -236,9 +240,11 @@ export const refundOrder = (
 
 /** GET /api/admin/logs — 管理员操作日志 */
 export const getAdminLogs = (params?: {
-  adminId?: number;
+  admin_id?: number;
   operation?: string;
   result?: string;
+  page?: number;
+  size?: number;
 }): Promise<PageResponse<AdminLogDTO>> => {
   return http.get<PageResponse<AdminLogDTO>>("/admin/logs", { params });
 };

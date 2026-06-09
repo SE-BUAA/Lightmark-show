@@ -1,0 +1,11 @@
+用户需求：%s。
+请提取以下字段并只返回 JSON，不要输出 Markdown：
+{
+  "destination": "目的地或地标，未提及为 null",
+  "maxPrice": "价格上限数字，未提及为 null",
+  "roomNum": "房间数数字，未提及为 null",
+  "adultNum": "入住人数数字，未提及为 null",
+  "facilities": ["偏好设施或偏好关键词，如安静、亲子、近某地、早餐、停车"],
+  "starLevel": "星级数字，未提及为 null",
+  "recommendText": "一句自然推荐语"
+}
