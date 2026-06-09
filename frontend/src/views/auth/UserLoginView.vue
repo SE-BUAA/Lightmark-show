@@ -1,3 +1,104 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import {
+  loginApi,
+  registerApi,
+  sendEmailVerificationCodeApi,
+} from "@/api/auth";
+import CaptchaField from "@/components/auth/CaptchaField.vue";
+import VerificationCodeField from "@/components/auth/VerificationCodeField.vue";
+import { useAuthForm } from "@/composables/useAuthForm";
+import { useAuthStore } from "@/stores/auth";
+
+const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
+
+const {
+  form,
+  isRegisterMode,
+  submitting,
+  sendingCode,
+  captchaUrl,
+  sendButtonText,
+  passwordError,
+  nicknameError,
+  emailError,
+  phoneError,
+  canSendCode,
+  toggleMode,
+  refreshCaptcha,
+  startCooldown,
+  validateBeforeSubmit,
+  buildLoginPayload,
+  buildRegisterPayload,
+  buildSendRegisterEmailPayload,
+} = useAuthForm();
+
+const title = computed(() => (isRegisterMode.value ? "用户注册" : "用户登录"));
+const submitLabel = computed(() => (isRegisterMode.value ? "注册并登录" : "登录"));
+
+const submit = async () => {
+  const validationMessage = validateBeforeSubmit();
+  if (validationMessage) {
+    ElMessage.warning(validationMessage);
+    return;
+  }
+
+  submitting.value = true;
+  try {
+    if (isRegisterMode.value) {
+      await registerApi(buildRegisterPayload());
+      ElMessage.success("注册成功，请登录");
+      isRegisterMode.value = false;
+      form.verificationCode = "";
+      form.captchaCode = "";
+      refreshCaptcha();
+      return;
+    }
+
+    const loginRes = await loginApi(buildLoginPayload());
+    authStore.setSession(loginRes as unknown as Record<string, unknown>);
+    ElMessage.success("登录成功");
+
+    let redirect = "/";
+    if (route.query.redirect) {
+      if (Array.isArray(route.query.redirect)) {
+        redirect = route.query.redirect[0] || "/";
+      } else {
+        redirect = String(route.query.redirect) || "/";
+      }
+    }
+
+    await router.replace(redirect);
+  } catch {
+    refreshCaptcha();
+  } finally {
+    submitting.value = false;
+  }
+};
+
+const sendVerificationCode = async () => {
+  if (!canSendCode.value) {
+    ElMessage.warning("请先填写邮箱和图形验证码");
+    return;
+  }
+
+  sendingCode.value = true;
+  try {
+    await sendEmailVerificationCodeApi(buildSendRegisterEmailPayload());
+    ElMessage.success("验证码已发送到邮箱");
+    startCooldown(60);
+  } catch {
+    refreshCaptcha();
+  } finally {
+    sendingCode.value = false;
+  }
+};
+</script>
+
 <template>
   <div class="auth-page">
     <div class="auth-bg"></div>
@@ -7,24 +108,56 @@
           <span class="logo-icon">✦</span>
           <span class="logo-text">拾光旅行</span>
         </div>
-        <h1>{{ isRegisterMode ? "用户注册" : "用户登录" }}</h1>
-        <p>登录后进入主站；管理员也可通过独立后台入口登录。</p>
+        <h1>{{ title }}</h1>
+        <p>登录支持邮箱或昵称 + 密码。注册时必须完成邮箱验证，手机号仅注册时选填。</p>
       </div>
 
-      <el-form :model="form" label-position="top" @submit.prevent>
-        <el-form-item label="账号（手机号或邮箱）">
-          <el-input v-model="form.account" placeholder="请输入手机号或邮箱" />
+      <el-form label-position="top" @submit.prevent>
+        <el-form-item v-if="!isRegisterMode" label="登录账号（邮箱或昵称）">
+          <el-input v-model="form.account" placeholder="请输入邮箱或昵称" />
         </el-form-item>
+
+        <el-form-item v-if="isRegisterMode" label="邮箱">
+          <el-input v-model="form.email" placeholder="请输入常用邮箱或 .edu.cn 邮箱" />
+          <div v-if="emailError" class="field-error">{{ emailError }}</div>
+        </el-form-item>
+
+        <el-form-item v-if="isRegisterMode" label="昵称">
+          <el-input v-model="form.nickname" maxlength="30" show-word-limit placeholder="请输入昵称" />
+          <div v-if="nicknameError" class="field-error">{{ nicknameError }}</div>
+        </el-form-item>
+
         <el-form-item label="密码">
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="请输入密码"
+            :placeholder="isRegisterMode ? '请输入密码' : '请输入登录密码'"
             show-password
           />
+          <div v-if="passwordError" class="field-error">{{ passwordError }}</div>
+          <div class="field-hint">密码需为 8-20 位，且包含大小写字母和特殊字符 !#@$%^&amp;*()_</div>
         </el-form-item>
-        <el-form-item v-if="isRegisterMode" label="昵称">
-          <el-input v-model="form.nickname" placeholder="请输入昵称" />
+
+        <el-form-item v-if="isRegisterMode" label="手机号（选填）">
+          <div class="phone-row">
+            <el-input v-model="form.countryCode" class="country-code" placeholder="+86" />
+            <el-input v-model="form.phone" placeholder="请输入手机号（可不填）" />
+          </div>
+          <div v-if="phoneError" class="field-error">{{ phoneError }}</div>
+        </el-form-item>
+
+        <el-form-item label="图形验证码">
+          <CaptchaField v-model="form.captchaCode" :image-url="captchaUrl" @refresh="refreshCaptcha" />
+        </el-form-item>
+
+        <el-form-item v-if="isRegisterMode" label="注册邮箱验证码">
+          <VerificationCodeField
+            v-model="form.verificationCode"
+            :button-text="sendButtonText"
+            :disabled="!canSendCode"
+            :loading="sendingCode"
+            @send="sendVerificationCode"
+          />
         </el-form-item>
 
         <el-button
@@ -33,7 +166,7 @@
           :loading="submitting"
           @click="submit"
         >
-          {{ isRegisterMode ? "注册并登录" : "登录" }}
+          {{ submitLabel }}
         </el-button>
       </el-form>
 
@@ -46,86 +179,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { reactive, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
-import { loginApi, registerApi } from "@/api/auth";
-import { useAuthStore } from "@/stores/auth";
-
-const route = useRoute();
-const router = useRouter();
-const authStore = useAuthStore();
-
-const isRegisterMode = ref(false);
-const submitting = ref(false);
-
-const form = reactive({
-  account: "",
-  password: "",
-  nickname: "",
-});
-
-const toggleMode = () => {
-  isRegisterMode.value = !isRegisterMode.value;
-};
-
-const submit = async () => {
-  if (!form.account || !form.password) {
-    ElMessage.warning("请填写账号和密码");
-    return;
-  }
-  if (isRegisterMode.value && !form.nickname) {
-    ElMessage.warning("请填写昵称");
-    return;
-  }
-
-  submitting.value = true;
-
-  try {
-    if (isRegisterMode.value) {
-      // === 注册流程 ===
-      await registerApi({
-        account: form.account,
-        password: form.password,
-        nickname: form.nickname,
-      });
-      ElMessage.success("注册成功，请登录");
-      isRegisterMode.value = false;
-      return;
-    }
-
-    // === 登录流程 ===
-    // 新 API 直接返回 { token, userId, nickname, avatar, roles }
-    const loginRes = await loginApi({
-      account: form.account,
-      password: form.password,
-    });
-
-    // 保存登录会话（roles 已由后端返回，自动判断 isAdmin）
-    authStore.setSession(loginRes as unknown as Record<string, unknown>);
-
-    ElMessage.success("登录成功");
-
-    // 规范化 redirect 参数（可能为数组）
-    let redirect = "/";
-    if (route.query.redirect) {
-      if (Array.isArray(route.query.redirect)) {
-        redirect = route.query.redirect[0] || "/";
-      } else {
-        redirect = String(route.query.redirect) || "/";
-      }
-    }
-
-    await router.replace(redirect);
-  } catch {
-    // 错误已由请求拦截器统一处理
-  } finally {
-    submitting.value = false;
-  }
-};
-</script>
 
 <style scoped>
 .auth-page {
@@ -156,7 +209,7 @@ const submit = async () => {
 }
 
 .auth-card {
-  width: min(420px, 100%);
+  width: min(480px, 100%);
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -218,47 +271,37 @@ const submit = async () => {
   margin-top: 18px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.auth-footer :deep(a),
 .link-button {
   background: transparent;
-  border: 0;
-  color: var(--gold-400);
+  border: none;
+  color: var(--white);
   cursor: pointer;
   padding: 0;
-  font-size: 13px;
-  transition: color var(--duration-fast) var(--ease-out);
 }
 
-.link-button:hover,
-.auth-footer :deep(a:hover) {
-  color: var(--gold-300);
+.field-error {
+  margin-top: 6px;
+  color: #ffb4b4;
+  font-size: 12px;
 }
 
-:deep(.el-form-item__label) {
-  color: rgba(255, 255, 255, 0.6) !important;
+.field-hint {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
 }
 
-:deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: none !important;
+.phone-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 12px;
 }
 
-:deep(.el-input__inner) {
-  color: var(--white) !important;
-}
-
-:deep(.el-input__placeholder) {
-  color: rgba(255, 255, 255, 0.3) !important;
-}
-
-@media (max-width: 720px) {
-  .auth-card {
-    padding: 28px 20px;
-  }
+.country-code {
+  width: 100%;
 }
 </style>

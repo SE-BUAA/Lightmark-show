@@ -1,0 +1,133 @@
+package top.ortus.lightmark.backend.service;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import top.ortus.lightmark.backend.JwtTokenService;
+import top.ortus.lightmark.backend.converter.UserConverter;
+import top.ortus.lightmark.backend.dao.User;
+import top.ortus.lightmark.backend.dao.UserRepositoryImpl;
+import top.ortus.lightmark.backend.dto.UserDTO;
+import top.ortus.lightmark.backend.dto.auth.AuthLoginRequest;
+import top.ortus.lightmark.backend.dto.auth.AuthRegisterRequest;
+import top.ortus.lightmark.backend.dto.auth.AuthTokenDTO;
+import top.ortus.lightmark.backend.exception.ApiException;
+import top.ortus.lightmark.backend.security.UserIdentity;
+import top.ortus.lightmark.backend.utils.UserIdFormatter;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 认证服务类，处理用户注册、登录等认证相关功能
+ */
+@Service
+public class AuthService {
+
+    private final UserRepositoryImpl userRepositoryImpl;
+    private final JwtTokenService jwtTokenService;
+    private final CaptchaService captchaService;
+    private final AuthValidationService authValidationService;
+    private final VerificationCodeService verificationCodeService;
+    private final QqSmtpEmailService qqSmtpEmailService;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    /**
+     * 构造函数
+     */
+    public AuthService(UserRepositoryImpl userRepositoryImpl,
+                       JwtTokenService jwtTokenService,
+                       CaptchaService captchaService,
+                       AuthValidationService authValidationService,
+                       VerificationCodeService verificationCodeService,
+                       QqSmtpEmailService qqSmtpEmailService) {
+        this.userRepositoryImpl = userRepositoryImpl;
+        this.jwtTokenService = jwtTokenService;
+        this.captchaService = captchaService;
+        this.authValidationService = authValidationService;
+        this.verificationCodeService = verificationCodeService;
+        this.qqSmtpEmailService = qqSmtpEmailService;
+    }
+
+    public void sendEmailVerificationCode(String email, String captchaCode, HttpSession session) {
+        captchaService.verifyOrThrow(captchaCode, session);
+        String normalizedEmail = authValidationService.normalizeAndValidateEmail(email);
+        String code = verificationCodeService.generateAndSave(normalizedEmail, VerificationCodeService.CHANNEL_EMAIL);
+        qqSmtpEmailService.sendVerificationCode(normalizedEmail, code);
+    }
+
+    /**
+     * 用户注册
+     */
+    public UserDTO register(AuthRegisterRequest request, HttpSession session) {
+        authValidationService.validateRegistrationRequest(request);
+        captchaService.verifyOrThrow(request.getCaptchaCode(), session);
+
+        String email = authValidationService.normalizeAndValidateEmail(request.getEmail());
+        String nickname = authValidationService.normalizeNickname(request.getNickname());
+        authValidationService.ensureEmailAvailable(email);
+        authValidationService.ensureNicknameAvailable(nickname);
+        verificationCodeService.verifyOrThrow(email, VerificationCodeService.CHANNEL_EMAIL, request.getVerificationCode());
+
+        User user = new User();
+        user.setEmail(email);
+        user.setNickname(nickname);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setAvatar("");
+        user.setPoints(0);
+        user.setLevel((short) 0);
+        user.setStatus(0);
+        user.setRegister_source("EMAIL");
+        user.setCreate_time(LocalDateTime.now());
+        user.setUpdate_time(LocalDateTime.now());
+        user.setDeleted(false);
+
+        if (request.getPhone() != null && !request.getPhone().isBlank()) {
+            String countryCode = authValidationService.normalizeCountryCode(request.getCountryCode());
+            String phone = authValidationService.normalizePhone(request.getPhone());
+            String fullPhone = countryCode + phone;
+            authValidationService.ensurePhoneAvailable(fullPhone);
+            user.setPhone(fullPhone);
+            user.setCountry_code(countryCode);
+        }
+
+        userRepositoryImpl.insert(user);
+        User created = userRepositoryImpl.findByEmail(email);
+        return UserConverter.toDto(created);
+    }
+
+    /**
+     * 用户登录
+     */
+    public AuthTokenDTO login(AuthLoginRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        authValidationService.validateLoginRequest(request);
+        captchaService.verifyOrThrow(request.getCaptchaCode(), session);
+
+        User user = authValidationService.findLoginUser(request.getAccount());
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new ApiException(401, "invalid credentials");
+        }
+
+        user.setLast_login_time(LocalDateTime.now());
+        user.setLast_login_ip(resolveClientIp(httpRequest));
+        user.setUpdate_time(LocalDateTime.now());
+        userRepositoryImpl.update(user);
+
+        UserIdentity identity = userRepositoryImpl.findIdentityByUserId(user.getId());
+        List<String> roles = List.of(identity.name());
+        String token = jwtTokenService.createToken(Long.valueOf(user.getId()), user.getNickname(), identity);
+        return new AuthTokenDTO(token, UserIdFormatter.format16(user.getId()), user.getNickname(), user.getAvatar(), identity.name(), roles);
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+}

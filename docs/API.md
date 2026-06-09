@@ -75,6 +75,24 @@
 
   
 
+**### GET `/api/auth/captcha`**
+
+- 说明：获取登录/注册所需图形验证码图片（PNG），后端会将验证码文本写入 Session。
+
+**### POST `/api/auth/verification/email/send`**
+
+- 说明：发送注册邮箱验证码（发送前需先通过图形验证码校验）
+- 邮件发送改为 QQ 邮箱 SMTP 服务，请在后端配置中填写 QQ 邮箱账号、SMTP 授权码和发件人邮箱。
+- 其中 QQ 邮箱授权码对应字段为 `lightmark.auth.mail.password`，也就是环境变量 `AUTH_MAIL_PASSWORD`。
+
+- 请求体：
+
+```JSON
+{ "email": "user@qq.com", "captchaCode": "ABCD" }
+```
+
+- 返回：`true`
+
 **### POST `/api/auth/register`**
 
 - 说明：注册
@@ -83,10 +101,22 @@
     
 
 ```JSON
-{ "account": "手机号或邮箱", "password": "密码", "nickname": "昵称" }
+{
+  "email": "user@qq.com",
+  "nickname": "用户名",
+  "countryCode": "+86",
+  "phone": "13800138000",
+  "password": "Password!1",
+  "verificationCode": "123456",
+  "captchaCode": "ABCD"
+}
 ```
 
-  
+- `email` 必填，并且注册前必须通过邮箱验证码验证
+- `nickname` 必填且唯一，最长 30 字
+- `phone` / `countryCode` 选填，仅作为资料保存，不参与登录
+- 密码必须为 8-20 位，且包含大小写字母和特殊字符 `!#@$%^&*()_`
+- 邮箱仅允许常用邮箱域名及 `.edu.cn`
 
 - 返回：`UserDTO`
     
@@ -99,8 +129,12 @@
     
 
 ```JSON
-{ "account": "手机号或邮箱", "password": "密码" }
+{ "account": "邮箱或昵称", "password": "Password!1", "captchaCode": "ABCD" }
 ```
+
+- 登录账号支持邮箱或昵称
+- 登录使用“邮箱/昵称 + 密码 + 图形验证码”
+- 手机号不参与登录
 
   
 
@@ -1003,7 +1037,7 @@ POST `/api/chat/context/{sessionId}/reset` — 重置会话历史（已实现为
     
 - 对外返回时将函数执行结果纳入 `data` 或通过后续消息返回。
     
-- 具体参考工具类 [tools](src/main/java/top/ortus/timemark/backend/tools)实现，注册函数并追加到yaml配置
+- 具体参考工具类 [tools](src/main/java/top/ortus/lightmark/backend/tools)实现，注册函数并追加到yaml配置
     
 
 该能力的基础集成已添加（模型调用与上下文管理），但完整的函数映射与执行策略需要按业务补充（`【待实现】`）。

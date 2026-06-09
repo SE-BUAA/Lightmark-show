@@ -1,6 +1,6 @@
-INSERT INTO `user` (id, phone, email, password, nickname, points, level, status, deleted) VALUES
-(1, '13800000000', 'admin@timemark.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 0, 3, 0, 0),
-(2, '13900000000', 'user@timemark.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '普通用户', 120, 1, 0, 0);
+INSERT INTO `user` (id, phone, email, password, nickname, country_code, register_source, points, level, status, deleted) VALUES
+(1, '13800000000', 'admin@lightmark.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', '+86', 'PHONE', 0, 3, 0, 0),
+(2, '13900000000', 'user@lightmark.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '普通用户', '+86', 'PHONE', 120, 1, 0, 0);
 
 INSERT INTO role (id, role_name, permission) VALUES
 (1, 'ADMIN', '*'),

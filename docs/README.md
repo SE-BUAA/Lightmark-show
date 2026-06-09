@@ -84,7 +84,7 @@ frontend/
 ### 后端 (Spring Boot)  
 
 backend/  
-├── src/main/java/top/ortus/timemark/backend/  
+├── src/main/java/top/ortus/lightmark/backend/  
 │   ├── controller/       # REST 控制器（Auth/User/Admin/Crud/Module）  
 │   ├── service/          # 业务逻辑  
 │   ├── dao/              # MyBatis-Plus Mapper + 实体  

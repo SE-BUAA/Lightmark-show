@@ -14,15 +14,15 @@
 
 ### Backend
 
-- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/controller/ConversationController.java`
-- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/service/ConversationService.java`
-- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatMessageDTO.java`
-- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatContextDTO.java`
-- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/service/UserService.java`
-- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/service/UserServiceImpl.java`
-- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/timemark/backend/controller/UserController.java`
-- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/test/java/top/ortus/timemark/backend/controller/ConversationControllerTest.java`
-- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/test/java/top/ortus/timemark/backend/controller/UserPasswordControllerTest.java`
+- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/controller/ConversationController.java`
+- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/service/ConversationService.java`
+- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatMessageDTO.java`
+- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatContextDTO.java`
+- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/service/UserService.java`
+- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/service/UserServiceImpl.java`
+- Modify: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/main/java/top/ortus/lightmark/backend/controller/UserController.java`
+- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/test/java/top/ortus/lightmark/backend/controller/ConversationControllerTest.java`
+- Create: `c:/Users/tangs/OneDrive/Desktop/Lightmark-main/backend/src/test/java/top/ortus/lightmark/backend/controller/UserPasswordControllerTest.java`
 
 ### Frontend
 
@@ -36,27 +36,27 @@
 ## Task 1: Backend Chat Context + systemPrompt
 
 **Files:**
-- Create: `backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatMessageDTO.java`
-- Create: `backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatContextDTO.java`
-- Modify: `backend/src/main/java/top/ortus/timemark/backend/service/ConversationService.java`
-- Modify: `backend/src/main/java/top/ortus/timemark/backend/controller/ConversationController.java`
+- Create: `backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatMessageDTO.java`
+- Create: `backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatContextDTO.java`
+- Modify: `backend/src/main/java/top/ortus/lightmark/backend/service/ConversationService.java`
+- Modify: `backend/src/main/java/top/ortus/lightmark/backend/controller/ConversationController.java`
 
 - [ ] **Step 1: Write failing tests for context/reset + systemPrompt passthrough**
 
-Create `backend/src/test/java/top/ortus/timemark/backend/controller/ConversationControllerTest.java`:
+Create `backend/src/test/java/top/ortus/lightmark/backend/controller/ConversationControllerTest.java`:
 
 ```java
-package top.ortus.timemark.backend.controller;
+package top.ortus.lightmark.backend.controller;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import top.ortus.timemark.backend.BackendApplication;
-import top.ortus.timemark.backend.common.ApiResponse;
-import top.ortus.timemark.backend.dto.AiDTO;
-import top.ortus.timemark.backend.dto.chat.ChatContextDTO;
-import top.ortus.timemark.backend.dto.chat.ChatRequest;
+import top.ortus.lightmark.backend.BackendApplication;
+import top.ortus.lightmark.backend.common.ApiResponse;
+import top.ortus.lightmark.backend.dto.AiDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatContextDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatRequest;
 
 import java.util.List;
 
@@ -113,10 +113,10 @@ Expected: FAIL，原因包含 `getContext/resetContext` 不存在（编译失败
 
 - [ ] **Step 3: Add chat DTOs**
 
-Create `backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatMessageDTO.java`:
+Create `backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatMessageDTO.java`:
 
 ```java
-package top.ortus.timemark.backend.dto.chat;
+package top.ortus.lightmark.backend.dto.chat;
 
 public class ChatMessageDTO {
     private String role;
@@ -148,10 +148,10 @@ public class ChatMessageDTO {
 }
 ```
 
-Create `backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatContextDTO.java`:
+Create `backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatContextDTO.java`:
 
 ```java
-package top.ortus.timemark.backend.dto.chat;
+package top.ortus.lightmark.backend.dto.chat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -188,10 +188,10 @@ public class ChatContextDTO {
 
 - [ ] **Step 4: Implement ConversationService support for systemPrompt + get/reset context**
 
-Update `backend/src/main/java/top/ortus/timemark/backend/service/ConversationService.java`:
+Update `backend/src/main/java/top/ortus/lightmark/backend/service/ConversationService.java`:
 
 ```java
-package top.ortus.timemark.backend.service;
+package top.ortus.lightmark.backend.service;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -201,12 +201,12 @@ import org.springframework.ai.deepseek.DeepSeekChatModel;
 import org.springframework.ai.deepseek.DeepSeekChatOptions;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import top.ortus.timemark.backend.dto.AiDTO;
-import top.ortus.timemark.backend.dto.chat.ChatContextDTO;
-import top.ortus.timemark.backend.dto.chat.ChatMessageDTO;
-import top.ortus.timemark.backend.tools.UpdateEmailTool;
-import top.ortus.timemark.backend.tools.UpdateNicknameTool;
-import top.ortus.timemark.backend.tools.WebSearchTool;
+import top.ortus.lightmark.backend.dto.AiDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatContextDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatMessageDTO;
+import top.ortus.lightmark.backend.tools.UpdateEmailTool;
+import top.ortus.lightmark.backend.tools.UpdateNicknameTool;
+import top.ortus.lightmark.backend.tools.WebSearchTool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -368,10 +368,10 @@ public class ConversationService {
 
 - [ ] **Step 5: Add controller endpoints (context/reset) and pass systemPrompt**
 
-Update `backend/src/main/java/top/ortus/timemark/backend/controller/ConversationController.java`:
+Update `backend/src/main/java/top/ortus/lightmark/backend/controller/ConversationController.java`:
 
 ```java
-package top.ortus.timemark.backend.controller;
+package top.ortus.lightmark.backend.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -382,13 +382,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import top.ortus.timemark.backend.common.ApiResponse;
-import top.ortus.timemark.backend.dto.AiDTO;
-import top.ortus.timemark.backend.dto.chat.ChatContextDTO;
-import top.ortus.timemark.backend.dto.chat.ChatRequest;
-import top.ortus.timemark.backend.dto.chat.RegionCompleteRequest;
-import top.ortus.timemark.backend.dto.chat.StreamChatRequest;
-import top.ortus.timemark.backend.service.ConversationService;
+import top.ortus.lightmark.backend.common.ApiResponse;
+import top.ortus.lightmark.backend.dto.AiDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatContextDTO;
+import top.ortus.lightmark.backend.dto.chat.ChatRequest;
+import top.ortus.lightmark.backend.dto.chat.RegionCompleteRequest;
+import top.ortus.lightmark.backend.dto.chat.StreamChatRequest;
+import top.ortus.lightmark.backend.service.ConversationService;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -447,11 +447,11 @@ Expected: PASS
 
 ```powershell
 cd c:\Users\tangs\OneDrive\Desktop\Lightmark-main
-git add backend/src/main/java/top/ortus/timemark/backend/service/ConversationService.java `
-  backend/src/main/java/top/ortus/timemark/backend/controller/ConversationController.java `
-  backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatMessageDTO.java `
-  backend/src/main/java/top/ortus/timemark/backend/dto/chat/ChatContextDTO.java `
-  backend/src/test/java/top/ortus/timemark/backend/controller/ConversationControllerTest.java
+git add backend/src/main/java/top/ortus/lightmark/backend/service/ConversationService.java `
+  backend/src/main/java/top/ortus/lightmark/backend/controller/ConversationController.java `
+  backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatMessageDTO.java `
+  backend/src/main/java/top/ortus/lightmark/backend/dto/chat/ChatContextDTO.java `
+  backend/src/test/java/top/ortus/lightmark/backend/controller/ConversationControllerTest.java
 git commit -m "feat(m2): add chat context/reset and system prompt support"
 ```
 
@@ -460,29 +460,29 @@ git commit -m "feat(m2): add chat context/reset and system prompt support"
 ## Task 2: Backend Password Update (real)
 
 **Files:**
-- Modify: `backend/src/main/java/top/ortus/timemark/backend/service/UserService.java`
-- Modify: `backend/src/main/java/top/ortus/timemark/backend/service/UserServiceImpl.java`
-- Modify: `backend/src/main/java/top/ortus/timemark/backend/controller/UserController.java`
-- Create: `backend/src/test/java/top/ortus/timemark/backend/controller/UserPasswordControllerTest.java`
+- Modify: `backend/src/main/java/top/ortus/lightmark/backend/service/UserService.java`
+- Modify: `backend/src/main/java/top/ortus/lightmark/backend/service/UserServiceImpl.java`
+- Modify: `backend/src/main/java/top/ortus/lightmark/backend/controller/UserController.java`
+- Create: `backend/src/test/java/top/ortus/lightmark/backend/controller/UserPasswordControllerTest.java`
 
 - [ ] **Step 1: Write failing test for password update**
 
-Create `backend/src/test/java/top/ortus/timemark/backend/controller/UserPasswordControllerTest.java`:
+Create `backend/src/test/java/top/ortus/lightmark/backend/controller/UserPasswordControllerTest.java`:
 
 ```java
-package top.ortus.timemark.backend.controller;
+package top.ortus.lightmark.backend.controller;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import top.ortus.timemark.backend.BackendApplication;
-import top.ortus.timemark.backend.JwtTokenService;
-import top.ortus.timemark.backend.common.ApiResponse;
-import top.ortus.timemark.backend.dao.UserRepositoryImpl;
-import top.ortus.timemark.backend.dto.user.UserPasswordUpdateRequest;
-import top.ortus.timemark.backend.security.UserIdentity;
+import top.ortus.lightmark.backend.BackendApplication;
+import top.ortus.lightmark.backend.JwtTokenService;
+import top.ortus.lightmark.backend.common.ApiResponse;
+import top.ortus.lightmark.backend.dao.UserRepositoryImpl;
+import top.ortus.lightmark.backend.dto.user.UserPasswordUpdateRequest;
+import top.ortus.lightmark.backend.security.UserIdentity;
 
 @SpringBootTest(classes = BackendApplication.class)
 public class UserPasswordControllerTest {
@@ -526,14 +526,14 @@ Expected: FAIL（旧逻辑始终返回 true，但不会更新 DB 密码，断言
 
 - [ ] **Step 3: Add service API for password update**
 
-Update `backend/src/main/java/top/ortus/timemark/backend/service/UserService.java`:
+Update `backend/src/main/java/top/ortus/lightmark/backend/service/UserService.java`:
 
 ```java
-package top.ortus.timemark.backend.service;
+package top.ortus.lightmark.backend.service;
 
-import top.ortus.timemark.backend.dto.UserDTO;
-import top.ortus.timemark.backend.dto.user.UserCreateRequest;
-import top.ortus.timemark.backend.dto.user.UserUpdateRequest;
+import top.ortus.lightmark.backend.dto.UserDTO;
+import top.ortus.lightmark.backend.dto.user.UserCreateRequest;
+import top.ortus.lightmark.backend.dto.user.UserUpdateRequest;
 
 import java.util.List;
 
@@ -558,11 +558,11 @@ public interface UserService {
 
 - [ ] **Step 4: Implement password update in UserServiceImpl**
 
-Update `backend/src/main/java/top/ortus/timemark/backend/service/UserServiceImpl.java` (新增 imports 与方法)：
+Update `backend/src/main/java/top/ortus/lightmark/backend/service/UserServiceImpl.java` (新增 imports 与方法)：
 
 ```java
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import top.ortus.timemark.backend.exception.ApiException;
+import top.ortus.lightmark.backend.exception.ApiException;
 ```
 
 在类中新增字段：
@@ -598,7 +598,7 @@ public boolean updatePassword(String id, String oldPassword, String newPassword)
 
 - [ ] **Step 5: Wire controller endpoint to service**
 
-Update `backend/src/main/java/top/ortus/timemark/backend/controller/UserController.java` 替换 `updatePassword` 方法体：
+Update `backend/src/main/java/top/ortus/lightmark/backend/controller/UserController.java` 替换 `updatePassword` 方法体：
 
 ```java
 @PutMapping("/password")
@@ -625,10 +625,10 @@ Expected: PASS
 
 ```powershell
 cd c:\Users\tangs\OneDrive\Desktop\Lightmark-main
-git add backend/src/main/java/top/ortus/timemark/backend/service/UserService.java `
-  backend/src/main/java/top/ortus/timemark/backend/service/UserServiceImpl.java `
-  backend/src/main/java/top/ortus/timemark/backend/controller/UserController.java `
-  backend/src/test/java/top/ortus/timemark/backend/controller/UserPasswordControllerTest.java
+git add backend/src/main/java/top/ortus/lightmark/backend/service/UserService.java `
+  backend/src/main/java/top/ortus/lightmark/backend/service/UserServiceImpl.java `
+  backend/src/main/java/top/ortus/lightmark/backend/controller/UserController.java `
+  backend/src/test/java/top/ortus/lightmark/backend/controller/UserPasswordControllerTest.java
 git commit -m "feat(m2): implement real password update"
 ```
 

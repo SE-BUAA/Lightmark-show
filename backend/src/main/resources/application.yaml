@@ -85,15 +85,44 @@ server:
   # Server port configuration
   port: ${SERVER_PORT:8080}
 
-timemark:
+lightmark:
   ai:
     api-url: ${LIGHTMARK_AI_API_URL:${AI_API_URL:https://api.deepseek.com/chat/completions}}
     api-key: ${LIGHTMARK_AI_API_KEY:${AI_API_KEY:}}
     model: ${LIGHTMARK_AI_MODEL:${AI_MODEL:deepseek-v4-flash}}
+  auth:
+    captcha:
+      session-key: ${AUTH_CAPTCHA_SESSION_KEY:auth:captcha}
+      length: ${AUTH_CAPTCHA_LENGTH:4}
+      case-sensitive: ${AUTH_CAPTCHA_CASE_SENSITIVE:false}
+    verification:
+      code-length: ${AUTH_VERIFICATION_CODE_LENGTH:6}
+      expire-minutes: ${AUTH_VERIFICATION_EXPIRE_MINUTES:10}
+      resend-seconds: ${AUTH_VERIFICATION_RESEND_SECONDS:60}
+      max-send-per-hour: ${AUTH_VERIFICATION_MAX_SEND_PER_HOUR:5}
+      allowed-email-domains:
+        - gmail.com
+        - outlook.com
+        - hotmail.com
+        - icloud.com
+        - qq.com
+        - 163.com
+        - 126.com
+        - sina.com
+        - foxmail.com
+      allow-edu-cn: true
+    mail:
+      host: ${AUTH_MAIL_HOST:smtp.qq.com}
+      port: ${AUTH_MAIL_PORT:465}
+      username: ${AUTH_MAIL_USERNAME:novaortus@qq.com}
+      password: ${AUTH_MAIL_PASSWORD:zldezhjbhlfrcjii}
+      from-email: ${AUTH_MAIL_FROM_EMAIL:novaortus@qq.com}
+      from-name: ${AUTH_MAIL_FROM_NAME:lightmark}
+      ssl-enabled: ${AUTH_MAIL_SSL_ENABLED:true}
   jwt:
     # JWT token configuration
-    secret: ${JWT_SECRET:timemark-secret-key-please-change}
-    issuer: ${JWT_ISSUER:timemark}
+    secret: ${JWT_SECRET:lightmark-secret-key-please-change}
+    issuer: ${JWT_ISSUER:lightmark}
     expire-minutes: ${JWT_EXPIRE_MINUTES:120}
   object-storage:
     base-url: ${OBJECT_STORAGE_BASE_URL:https://objectstorage.ap-tokyo-1.oraclecloud.com/p/A0TR4wkNYrcGOzvpjsPLLgmD4y9YncSMik4XcQNwY7B5uo7BRt6K1qmEdFME9l27/n/nrrguvtqppqi/b/ortus-bucket/o/}
