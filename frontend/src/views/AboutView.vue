@@ -1,6 +1,6 @@
 <template>
-  <div class="about-page">
-    <section class="about-hero">
+  <div class="module-page">
+    <section class="module-hero">
       <div class="container">
         <h1 class="section-title">关于拾光旅行</h1>
         <p class="section-subtitle">
@@ -37,24 +37,6 @@
 </template>
 
 <style scoped>
-.about-page {
-  padding-top: 64px;
-}
-
-.about-hero {
-  padding: 80px 0 60px;
-  background: linear-gradient(135deg, var(--navy-900), var(--navy-700));
-  text-align: center;
-}
-
-.about-hero .section-title {
-  color: var(--white);
-}
-.about-hero .section-subtitle {
-  color: rgba(255, 255, 255, 0.5);
-  margin: 10px auto 0;
-}
-
 .about-content {
   padding: 60px 0;
 }

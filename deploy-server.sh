@@ -5,10 +5,10 @@ set -euo pipefail
 # Usage:
 #   bash deploy-server.sh [archive_name] [target_dir] [archive_dir]
 # Example:
-#   bash deploy-server.sh timemark.tar.gz /home/ubuntu/timemark /home/ubuntu
+#   bash deploy-server.sh lightmark.tar.gz /home/ubuntu/lightmark /home/ubuntu
 
-ARCHIVE_NAME="${1:-timemark.tar.gz}"
-TARGET_DIR="${2:-/home/ubuntu/timemark}"
+ARCHIVE_NAME="${1:-lightmark.tar.gz}"
+TARGET_DIR="${2:-/home/ubuntu/lightmark}"
 ARCHIVE_DIR="${3:-/home/ubuntu}"
 ARCHIVE_PATH="${ARCHIVE_DIR}/${ARCHIVE_NAME}"
 
@@ -24,7 +24,7 @@ fi
 
 if [[ ! -f "$ARCHIVE_PATH" ]]; then
   echo "[ERROR] Archive not found: $ARCHIVE_PATH"
-  echo "        Please upload it first, e.g.: scp timemark.tar.gz user@server:${ARCHIVE_DIR}/"
+  echo "        Please upload it first, e.g.: scp lightmark.tar.gz user@server:${ARCHIVE_DIR}/"
   exit 1
 fi
 
@@ -41,7 +41,7 @@ fi
 echo "[3/6] Extracting archive: $ARCHIVE_PATH"
 # Extract into a temp directory first to avoid tar metadata errors on the target dir,
 # then copy the project contents into the deploy directory.
-TMP_EXTRACT_DIR="$(mktemp -d "${ARCHIVE_DIR}/timemark-extract.XXXXXX")"
+TMP_EXTRACT_DIR="$(mktemp -d "${ARCHIVE_DIR}/lightmark-extract.XXXXXX")"
 cleanup() {
   rm -rf "$TMP_EXTRACT_DIR"
 }

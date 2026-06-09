@@ -18,7 +18,7 @@
         <el-option label="正常" :value="0" />
         <el-option label="封禁" :value="1" />
       </el-select>
-      <el-button type="primary" @click="loadData">搜索</el-button>
+      <el-button type="primary" @click="handleSearch">搜索</el-button>
       <el-button @click="resetSearch">重置</el-button>
     </div>
 
@@ -70,7 +70,18 @@
       </el-table-column>
     </el-table>
 
-    <div class="table-footer" v-if="total > 0">共 {{ total }} 条</div>
+    <div class="table-footer" v-if="total > 0">
+      <span>共 {{ total }} 条</span>
+      <el-pagination
+        v-if="total > pageSize"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        background
+        layout="prev, pager, next, jumper, total"
+        @current-change="loadData"
+      />
+    </div>
 
     <!-- 改等级对话框 -->
     <el-dialog v-model="levelDialog.visible" title="调整会员等级" width="400px">
@@ -110,6 +121,8 @@ import {
 
 const keyword = ref("");
 const statusFilter = ref<number | undefined>(undefined);
+const currentPage = ref(1);
+const pageSize = 100;
 const loading = ref(false);
 const saving = ref(false);
 const total = ref(0);
@@ -121,6 +134,8 @@ const loadData = async () => {
     const data = await getAdminUsers({
       keyword: keyword.value || undefined,
       status: statusFilter.value,
+      page: currentPage.value,
+      size: pageSize,
     });
     rows.value = data.list ?? [];
     total.value = data.total ?? 0;
@@ -132,6 +147,12 @@ const loadData = async () => {
 const resetSearch = async () => {
   keyword.value = "";
   statusFilter.value = undefined;
+  currentPage.value = 1;
+  await loadData();
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
   await loadData();
 };
 

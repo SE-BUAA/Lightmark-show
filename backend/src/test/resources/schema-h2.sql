@@ -3,11 +3,30 @@ CREATE TABLE `user` (
   `phone` VARCHAR(20),
   `email` VARCHAR(100),
   `password` VARCHAR(255) NOT NULL,
-  `nickname` VARCHAR(50) DEFAULT '',
+  `nickname` VARCHAR(30) NOT NULL,
+  `country_code` VARCHAR(8),
+  `last_login_time` TIMESTAMP NULL,
+  `last_login_ip` VARCHAR(45),
   `points` INT DEFAULT 0,
   `level` TINYINT DEFAULT 0,
   `status` TINYINT DEFAULT 0,
+  `register_source` VARCHAR(20) DEFAULT 'PHONE',
   `deleted` TINYINT DEFAULT 0,
+  `create_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `update_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_user_phone UNIQUE (`phone`),
+  CONSTRAINT uq_user_email UNIQUE (`email`),
+  CONSTRAINT uq_user_nickname UNIQUE (`nickname`)
+);
+
+CREATE TABLE auth_verification_code (
+  `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `target` VARCHAR(128) NOT NULL,
+  `channel` VARCHAR(20) NOT NULL,
+  `code` VARCHAR(20) NOT NULL,
+  `expire_time` TIMESTAMP NOT NULL,
+  `consumed_time` TIMESTAMP NULL,
+  `send_count` INT DEFAULT 0,
   `create_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `update_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

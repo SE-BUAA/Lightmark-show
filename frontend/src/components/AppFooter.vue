@@ -9,6 +9,7 @@
         <p class="footer-desc">
           用心记录每一次出发，让旅行成为生命中最美好的光影。
         </p>
+        <p class="footer-contact">联系客服：<a href="mailto:feedback@lightmark.com">feedback@lightmark.com</a></p>
       </div>
 
       <div class="footer-col">
@@ -22,16 +23,16 @@
       <div class="footer-col">
         <h4>帮助中心</h4>
         <router-link to="/about">关于我们</router-link>
-        <a href="#">退改签政策</a>
-        <a href="#">常见问题</a>
-        <a href="#">联系客服</a>
+        <router-link to="/privacy-policy">隐私政策</router-link>
+        <router-link to="/about">常见问题</router-link>
+        <a href="mailto:feedback@lightmark.com">联系客服</a>
       </div>
 
       <div class="footer-col">
         <h4>社区</h4>
         <router-link to="/community">游记攻略</router-link>
         <router-link to="/itinerary">行程规划</router-link>
-        <a href="#">问答社区</a>
+        <router-link to="/community">问答社区</router-link>
       </div>
     </div>
 
@@ -87,6 +88,16 @@
   line-height: 1.7;
   max-width: 300px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.footer-contact {
+  margin-top: 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.footer-contact a {
+  color: var(--gold-400);
 }
 
 .footer-col h4 {

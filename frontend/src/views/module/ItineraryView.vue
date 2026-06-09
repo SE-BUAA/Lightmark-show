@@ -462,25 +462,8 @@ onMounted(loadPlans)
 </script>
 
 <style scoped>
-.module-page { padding-top: 64px; }
 .module-hero {
-  background: linear-gradient(135deg, #0a1628, #1e3f66 55%, #c9953d);
-  color: #fff;
-  padding: 48px 0 36px;
-}
-.module-hero .section-title,
-.module-hero .section-subtitle { color: #fff; }
-.hero-inner {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-}
-.module-kicker {
-  color: var(--gold-300);
-  display: block;
-  font-weight: 700;
-  margin-bottom: 10px;
+  background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 50%, #172a2a 100%);
 }
 .planner-section { padding: 32px 0 56px; }
 .planner-grid {

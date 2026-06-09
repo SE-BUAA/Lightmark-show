@@ -171,6 +171,11 @@ const routes: Array<RouteRecordRaw> = [
     component: () =>
       import(/* webpackChunkName: "about" */ "../views/AboutView.vue"),
   },
+  {
+    path: "/privacy-policy",
+    name: "privacy-policy",
+    component: () => import("@/views/PrivacyPolicyView.vue"),
+  },
 ];
 
 // 创建路由实例，使用HTML5 History模式
