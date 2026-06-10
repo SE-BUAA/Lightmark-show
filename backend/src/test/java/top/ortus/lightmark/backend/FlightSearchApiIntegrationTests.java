@@ -6,7 +6,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -23,19 +22,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
-class FlightSearchApiIntegrationTests {
-
-    @Autowired
-    private MockMvc mockMvc;
+class FlightSearchApiIntegrationTests extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private JwtTokenService jwtTokenService;
-
     private String userToken() {
-        return "Bearer " + jwtTokenService.createToken(2L, "普通用户", List.of("USER"));
+        return bearerToken(2L, "普通用户", List.of("USER"));
     }
 
     // 覆盖前端机票模块主链路：搜索、价格日历、预览下单、支付、取消/退款和库存回补。

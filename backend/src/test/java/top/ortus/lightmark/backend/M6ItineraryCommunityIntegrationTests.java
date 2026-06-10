@@ -7,7 +7,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -24,32 +23,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
-class M6ItineraryCommunityIntegrationTests {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private JwtTokenService jwtTokenService;
+class M6ItineraryCommunityIntegrationTests extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private String userToken() {
-        return "Bearer " + jwtTokenService.createToken(2L, "普通用户", List.of("USER"));
+        return bearerToken(2L, "普通用户", List.of("USER"));
     }
 
     private String otherUserToken() {
-        return "Bearer " + jwtTokenService.createToken(99L, "其他用户", List.of("USER"));
+        return bearerToken(99L, "其他用户", List.of("USER"));
     }
 
     private String secondUserToken() {
         ensureSecondUser();
-        return "Bearer " + jwtTokenService.createToken(3L, "second-user", List.of("USER"));
+        return bearerToken(3L, "second-user", List.of("USER"));
     }
 
     private String adminToken() {
-        return "Bearer " + jwtTokenService.createToken(1L, "管理员", List.of("ADMIN"));
+        return bearerToken(1L, "管理员", List.of("ADMIN"));
     }
 
     private void ensureSecondUser() {
