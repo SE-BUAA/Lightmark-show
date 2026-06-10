@@ -170,6 +170,16 @@ const sendVerificationCode = async () => {
           <CaptchaField v-model="form.captchaCode" :image-url="captchaUrl" @refresh="refreshCaptcha" />
         </el-form-item>
 
+        <el-form-item v-if="isRegisterMode" label="注册邮箱验证码">
+          <VerificationCodeField
+            v-model="form.verificationCode"
+            :button-text="sendButtonText"
+            :disabled="!canSendCode"
+            :loading="sendingCode"
+            @send="sendVerificationCode"
+          />
+        </el-form-item>
+
         <el-form-item class="consent-item">
           <el-checkbox v-model="privacyAccepted">
             我已阅读并同意
