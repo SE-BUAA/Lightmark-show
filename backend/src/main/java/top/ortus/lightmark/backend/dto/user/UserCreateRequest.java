@@ -26,7 +26,12 @@ public class UserCreateRequest {
     }
 
     public void setPhone(String phone) {
-        this.phone = phone;
+        if (phone == null) {
+            this.phone = null;
+            return;
+        }
+        String v = phone.trim();
+        this.phone = v.isEmpty() ? null : v;
     }
 
     public String getEmail() {
@@ -34,7 +39,12 @@ public class UserCreateRequest {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        if (email == null) {
+            this.email = null;
+            return;
+        }
+        String v = email.trim();
+        this.email = v.isEmpty() ? null : v;
     }
 
     public String getPassword() {
