@@ -778,8 +778,8 @@ const saveProfile = async () => {
   try {
     const res = await updateCurrentUser({
       nickname: editForm.value.nickname,
-      phone: editForm.value.phone.trim() || undefined,
-      email: editForm.value.email.trim() || undefined,
+      phone: editForm.value.phone.trim() || null,
+      email: editForm.value.email.trim() || null,
       gender: editForm.value.gender,
       birth_date: editForm.value.birth_date || undefined,
     });

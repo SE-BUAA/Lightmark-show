@@ -28,8 +28,8 @@ export interface UserCurrentDTO {
 /** 用户资料更新请求体 — PUT /api/user/current */
 export interface UserUpdateRequest {
   nickname?: string;
-  phone?: string;
-  email?: string;
+  phone?: string | null;
+  email?: string | null;
   gender?: number;
   birth_date?: string;
 }

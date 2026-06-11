@@ -118,7 +118,7 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public int insert(User user) {
-        Map<String, Object> payload = buildPayload(user, true);
+        Map<String, Object> payload = buildPayload(user, true, Set.of());
         StringBuilder columns = new StringBuilder();
         StringBuilder values = new StringBuilder();
         MapSqlParameterSource params = new MapSqlParameterSource();
@@ -140,7 +140,11 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public int update(User user) {
-        Map<String, Object> payload = buildPayload(user, false);
+        return update(user, Set.of());
+    }
+
+    public int update(User user, Set<String> nullableColumns) {
+        Map<String, Object> payload = buildPayload(user, false, nullableColumns);
         if (payload.isEmpty()) {
             return 0;
         }
@@ -217,29 +221,29 @@ public class UserRepositoryImpl implements UserRepository {
      * @param includeCreateTime 是否包含创建时间
      * @return 数据负载 Map
      */
-    private Map<String, Object> buildPayload(User user, boolean includeCreateTime) {
+    private Map<String, Object> buildPayload(User user, boolean includeCreateTime, Set<String> nullableColumns) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        putIfPresent(payload, "phone", user.getPhone());
-        putIfPresent(payload, "email", user.getEmail());
-        putIfPresent(payload, "password", user.getPassword());
-        putIfPresent(payload, "nickname", user.getNickname());
-        putIfPresent(payload, "avatar", user.getAvatar());
-        putIfPresent(payload, "gender", user.getGender());
-        putIfPresent(payload, "birth_date", user.getBirth_date());
-        putIfPresent(payload, "points", user.getPoints());
-        putIfPresent(payload, "level", user.getLevel());
-        putIfPresent(payload, "status", user.getStatus());
-        putIfPresent(payload, "register_source", user.getRegister_source());
-        putIfPresent(payload, "last_login_time", toTimestamp(user.getLast_login_time()));
-        putIfPresent(payload, "last_login_ip", user.getLast_login_ip());
+        putIfPresent(payload, "phone", user.getPhone(), nullableColumns);
+        putIfPresent(payload, "email", user.getEmail(), nullableColumns);
+        putIfPresent(payload, "password", user.getPassword(), nullableColumns);
+        putIfPresent(payload, "nickname", user.getNickname(), nullableColumns);
+        putIfPresent(payload, "avatar", user.getAvatar(), nullableColumns);
+        putIfPresent(payload, "gender", user.getGender(), nullableColumns);
+        putIfPresent(payload, "birth_date", user.getBirth_date(), nullableColumns);
+        putIfPresent(payload, "points", user.getPoints(), nullableColumns);
+        putIfPresent(payload, "level", user.getLevel(), nullableColumns);
+        putIfPresent(payload, "status", user.getStatus(), nullableColumns);
+        putIfPresent(payload, "register_source", user.getRegister_source(), nullableColumns);
+        putIfPresent(payload, "last_login_time", toTimestamp(user.getLast_login_time()), nullableColumns);
+        putIfPresent(payload, "last_login_ip", user.getLast_login_ip(), nullableColumns);
         if (hasColumn("country_code")) {
-            putIfPresent(payload, "country_code", user.getCountry_code());
+            putIfPresent(payload, "country_code", user.getCountry_code(), nullableColumns);
         }
         if (includeCreateTime) {
-            putIfPresent(payload, "create_time", toTimestamp(user.getCreate_time()));
+            putIfPresent(payload, "create_time", toTimestamp(user.getCreate_time()), nullableColumns);
         }
-        putIfPresent(payload, "update_time", toTimestamp(user.getUpdate_time()));
-        putIfPresent(payload, "deleted", user.isDeleted());
+        putIfPresent(payload, "update_time", toTimestamp(user.getUpdate_time()), nullableColumns);
+        putIfPresent(payload, "deleted", user.isDeleted(), nullableColumns);
         return payload;
     }
 
@@ -249,8 +253,11 @@ public class UserRepositoryImpl implements UserRepository {
      * @param column 列名
      * @param value 值
      */
-    private void putIfPresent(Map<String, Object> payload, String column, Object value) {
-        if (value == null || !hasColumn(column)) {
+    private void putIfPresent(Map<String, Object> payload, String column, Object value, Set<String> nullableColumns) {
+        if (!hasColumn(column)) {
+            return;
+        }
+        if (value == null && !nullableColumns.contains(column)) {
             return;
         }
         payload.put(column, value);
