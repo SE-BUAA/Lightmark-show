@@ -173,6 +173,22 @@ public class UserRepositoryImpl implements UserRepository {
         );
     }
 
+    public int insertPointsLog(String userId, int type, int amount, String source, String orderId) {
+        String sql = """
+                insert into points_log (user_id, type, amount, source, order_id, create_time)
+                values (?, ?, ?, ?, ?, ?)
+                """;
+        return jdbcTemplate.update(
+                sql,
+                userId,
+                type,
+                amount,
+                source,
+                orderId,
+                Timestamp.valueOf(LocalDateTime.now())
+        );
+    }
+
     @Override
     public int softDeleteById(String id) {
         if (hasColumn("update_time")) {

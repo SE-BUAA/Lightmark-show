@@ -39,6 +39,16 @@ public class MembershipService {
         return new UserLevelUpgradeInfoDTO(currentLevel, pointsNeeded, nextRule.getBenefits());
     }
 
+    public short resolveLevelByPoints(int points) {
+        short level = 0;
+        for (lightmarkMembershipProperties.LevelRule rule : effectiveRules()) {
+            if (points >= rule.getPointsThreshold()) {
+                level = rule.getLevel();
+            }
+        }
+        return level;
+    }
+
     private List<lightmarkMembershipProperties.LevelRule> effectiveRules() {
         List<lightmarkMembershipProperties.LevelRule> rules = membershipProperties.getLevels();
         if (rules != null && !rules.isEmpty()) {

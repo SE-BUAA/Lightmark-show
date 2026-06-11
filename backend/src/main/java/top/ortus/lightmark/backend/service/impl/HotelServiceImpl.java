@@ -31,6 +31,7 @@ import top.ortus.lightmark.backend.entity.InvoiceApplication;
 import top.ortus.lightmark.backend.exception.ApiException;
 import top.ortus.lightmark.backend.mapper.InvoiceApplicationMapper;
 import top.ortus.lightmark.backend.mapper.ProductMapper;
+import top.ortus.lightmark.backend.service.PointsMembershipService;
 import top.ortus.lightmark.backend.utils.HotelDemoDataFactory;
 import top.ortus.lightmark.backend.vo.HotelVO;
 
@@ -72,6 +73,7 @@ public class HotelServiceImpl implements HotelService {
     private final InvoiceApplicationMapper invoiceApplicationMapper;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final PointsMembershipService pointsMembershipService;
 
     @Override
     @Transactional(readOnly = true)
@@ -225,6 +227,7 @@ public class HotelServiceImpl implements HotelService {
                 orderId,
                 userId
         );
+        pointsMembershipService.awardPoints(String.valueOf(userId), String.valueOf(orderId), "HOTEL_PAY", decimal(row.get("pay_amount")));
         return getHotelOrderDetail(userId, orderId);
     }
 
@@ -324,6 +327,9 @@ public class HotelServiceImpl implements HotelService {
             restoreHotelStock(number(row.get("hotel_id")).longValue(), number(row.get("room_num")).intValue());
         }
         restorePoints(userId, orderId, number(row.get("points_deducted")).intValue());
+        if (status == STATUS_PAID) {
+            pointsMembershipService.revokePoints(String.valueOf(userId), String.valueOf(orderId), "HOTEL_REFUND", decimal(row.get("pay_amount")));
+        }
     }
 
     @Override
@@ -697,6 +703,7 @@ public class HotelServiceImpl implements HotelService {
                 orderId,
                 now
         );
+        pointsMembershipService.refreshLevel(String.valueOf(userId));
     }
 
     private String writeHotelOrderExtra(ProductMapper.RoomDetailRow room,
@@ -885,6 +892,7 @@ public class HotelServiceImpl implements HotelService {
                 orderId,
                 now
         );
+        pointsMembershipService.refreshLevel(String.valueOf(userId));
     }
 
     private void validateInvoiceRequest(InvoiceRequestDTO request) {

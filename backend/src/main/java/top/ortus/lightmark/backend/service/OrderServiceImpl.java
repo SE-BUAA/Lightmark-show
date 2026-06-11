@@ -55,6 +55,9 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private TrainService trainService;
 
+    @Autowired
+    private PointsMembershipService pointsMembershipService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TrainOrderResponse createTrainOrder(Long userId, TrainOrderRequest request) {
@@ -197,6 +200,7 @@ public class OrderServiceImpl implements OrderService {
         order.setPickupCode(generatePickupCode());
         order.setUpdateTime(LocalDateTime.now());
         orderMapper.updateById(order);
+        pointsMembershipService.awardPoints(String.valueOf(order.getUserId()), String.valueOf(order.getId()), paySource(order.getOrderType()), order.getPayAmount());
         return toResponse(order);
     }
 
@@ -316,6 +320,7 @@ public class OrderServiceImpl implements OrderService {
         if (productId != null && !productId.isBlank()) {
             orderMapper.incrementStock(productId, travelerCount);
         }
+        pointsMembershipService.revokePoints(String.valueOf(order.getUserId()), String.valueOf(order.getId()), "VACATION_REFUND", order.getPayAmount());
         return new VacationRefundResponse(order.getOrderNo(), 4, order.getPayAmount(), refundAmount, rule);
     }
 
@@ -467,8 +472,15 @@ public class OrderServiceImpl implements OrderService {
         if (productId != null && !productId.isBlank()) {
             orderMapper.incrementStock(productId, 1);
         }
-
+        pointsMembershipService.revokePoints(String.valueOf(order.getUserId()), String.valueOf(order.getId()), "TRAIN_REFUND", order.getPayAmount());
         return new TrainRefundResponse(order.getOrderNo(), 4, order.getPayAmount(), refundAmount, rule);
+    }
+
+    private String paySource(String orderType) {
+        if ("VACATION".equals(orderType)) {
+            return "VACATION_PAY";
+        }
+        return "TRAIN_PAY";
     }
 
     @Override
