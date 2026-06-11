@@ -140,6 +140,10 @@ public class TrainMcpClient {
         try {
             Map<String, Object> parsed = parseToolContent(text);
             log.info("12306 MCP tool {} success={}, count={}", name, parsed.get("success"), parsed.get("count"));
+            if (Boolean.FALSE.equals(parsed.get("success"))) {
+                log.warn("12306 MCP tool {} returned failure: error={}, detail={}",
+                    name, parsed.get("error"), parsed.get("detail"));
+            }
             return parsed;
         } catch (Exception ex) {
             log.warn("12306 MCP tool {} returned unparsable content: {}", name, summarize(text));

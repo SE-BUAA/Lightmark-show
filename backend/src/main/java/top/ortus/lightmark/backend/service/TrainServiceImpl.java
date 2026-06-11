@@ -10,7 +10,9 @@ import top.ortus.lightmark.backend.dto.module.TrainTicketDTO;
 import top.ortus.lightmark.backend.utils.Constant;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -30,6 +32,10 @@ public class TrainServiceImpl implements TrainService {
     private static final String TRAIN_TYPE_BULLET = "\u52a8\u8f66";
     private static final String TRAIN_TYPE_NORMAL = "\u666e\u901f";
     private static final List<String> SEAT_ORDER = List.of("商务座", "一等座", "二等座", "软卧", "硬卧", "硬座");
+    private static final List<String> TRANSFER_FALLBACK_STATIONS = List.of(
+        "石家庄", "郑州", "济南", "南京", "西安", "武汉", "上海", "天津", "保定", "太原南",
+        "徐州", "合肥", "长沙", "南昌", "杭州", "成都", "重庆", "广州", "深圳"
+    );
     private static final Map<String, String> API_SEAT_NAMES = Map.of(
         "business", "商务座",
         "first_class", "一等座",
@@ -155,7 +161,11 @@ public class TrainServiceImpl implements TrainService {
             return cached.tickets();
         }
         Map<String, Object> transferResponse = queryTransferTool(startStation, endStation, date);
-        List<TrainTicketDTO> tickets = readTransferRows(transferResponse).stream()
+        List<Map<String, Object>> transferRows = readTransferRows(transferResponse);
+        if (transferRows.isEmpty() && !Boolean.TRUE.equals(transferResponse.get("success"))) {
+            transferRows = fallbackTransferRows(startStation, endStation, date);
+        }
+        List<TrainTicketDTO> tickets = transferRows.stream()
             .map(transfer -> toTransferTicket(startStation, endStation, date, transfer))
             .filter(Objects::nonNull)
             .filter(ticket -> transferMatchesTrainTypes(ticket, trainTypes))
@@ -174,6 +184,44 @@ public class TrainServiceImpl implements TrainService {
         arguments.put("isShowWZ", "N");
         arguments.put("purpose_codes", "00");
         return trainMcpClient.callToolFast("query-transfer", arguments);
+    }
+
+    private List<Map<String, Object>> fallbackTransferRows(String startStation, String endStation, String date) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        long deadline = System.currentTimeMillis() + 12_000L;
+        for (String middleStation : TRANSFER_FALLBACK_STATIONS) {
+            if (System.currentTimeMillis() >= deadline || rows.size() >= 20) {
+                break;
+            }
+            if (middleStation.equals(startStation) || middleStation.equals(endStation)) {
+                continue;
+            }
+            List<Map<String, Object>> firstLegs = readTrainRows(queryTicketTool(startStation, middleStation, date));
+            if (firstLegs.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> secondLegs = readTrainRows(queryTicketTool(middleStation, endStation, date));
+            if (secondLegs.isEmpty()) {
+                continue;
+            }
+            for (Map<String, Object> firstLeg : firstLegs.stream().limit(8).toList()) {
+                for (Map<String, Object> secondLeg : secondLegs.stream().limit(24).toList()) {
+                    if (!isReasonableTransfer(firstLeg, secondLeg)) {
+                        continue;
+                    }
+                    Map<String, Object> transfer = new LinkedHashMap<>();
+                    transfer.put("middle_station", middleStation);
+                    transfer.put("wait_time", calculateWaitTime(firstLeg, secondLeg));
+                    transfer.put("total_duration", calculateTotalDuration(firstLeg, secondLeg));
+                    transfer.put("segments", List.of(firstLeg, secondLeg));
+                    rows.add(transfer);
+                    if (rows.size() >= 20) {
+                        return rows;
+                    }
+                }
+            }
+        }
+        return rows;
     }
 
     private TrainCalendarDayResponse queryCalendarDay(String startStation, String endStation, String date, List<String> trainTypes, List<String> seatTypes) {
@@ -492,6 +540,57 @@ public class TrainServiceImpl implements TrainService {
             prices.put(seat, price);
         }
         return prices;
+    }
+
+    private boolean isReasonableTransfer(Map<String, Object> firstLeg, Map<String, Object> secondLeg) {
+        LocalTime arrive = parseTime(firstText(firstLeg.get("arrive_time"), firstLeg.get("arrival_time")));
+        LocalTime depart = parseTime(firstText(secondLeg.get("start_time"), secondLeg.get("depart_time")));
+        if (arrive == null || depart == null) {
+            return true;
+        }
+        long minutes = Duration.between(arrive, depart).toMinutes();
+        return minutes >= 15 && minutes <= 360;
+    }
+
+    private String calculateWaitTime(Map<String, Object> firstLeg, Map<String, Object> secondLeg) {
+        LocalTime arrive = parseTime(firstText(firstLeg.get("arrive_time"), firstLeg.get("arrival_time")));
+        LocalTime depart = parseTime(firstText(secondLeg.get("start_time"), secondLeg.get("depart_time")));
+        if (arrive == null || depart == null) {
+            return "";
+        }
+        long minutes = Duration.between(arrive, depart).toMinutes();
+        if (minutes < 0) {
+            minutes += 24 * 60;
+        }
+        return formatMinutes(minutes);
+    }
+
+    private String calculateTotalDuration(Map<String, Object> firstLeg, Map<String, Object> secondLeg) {
+        LocalTime depart = parseTime(firstText(firstLeg.get("start_time"), firstLeg.get("depart_time")));
+        LocalTime arrive = parseTime(firstText(secondLeg.get("arrive_time"), secondLeg.get("arrival_time")));
+        if (depart == null || arrive == null) {
+            return "";
+        }
+        long minutes = Duration.between(depart, arrive).toMinutes();
+        if (minutes < 0) {
+            minutes += 24 * 60;
+        }
+        return formatMinutes(minutes);
+    }
+
+    private String formatMinutes(long minutes) {
+        return String.format("%02d:%02d", minutes / 60, minutes % 60);
+    }
+
+    private LocalTime parseTime(String value) {
+        if (isBlank(value)) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(value.trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String resolveTrainType(String trainNo) {

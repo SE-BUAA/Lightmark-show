@@ -136,13 +136,13 @@
 
       <div class="result-toolbar">
         <div>
-          <strong>{{ trainStore.trainsList.length }}</strong>
+          <strong>{{ trainResults.length }}</strong>
           <span>{{ activeMode === 'direct' ? '趟可选车次' : '个中转方案' }}</span>
           <el-tag v-if="searchForm.date" effect="plain">{{ searchForm.date }}</el-tag>
         </div>
       </div>
 
-      <el-table v-if="trainStore.trainsList.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
+      <el-table v-if="trainResults.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
         <el-table-column v-if="activeMode === 'direct'" prop="name" label="车次" min-width="110" />
         <el-table-column v-else label="中转车次" min-width="320">
           <template #default="{ row }">
@@ -191,11 +191,11 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="trainStore.trainsList.length > pageSize" class="pagination-bar">
+      <div v-if="trainResults.length > pageSize" class="pagination-bar">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="trainStore.trainsList.length"
+          :total="trainResults.length"
           background
           layout="prev, pager, next, jumper, total"
         />
@@ -319,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addTraveler, getTravelers, type TravelerDTO } from '@/api/user'
@@ -385,6 +385,10 @@ const autoSearchTimer = ref<number>()
 const currentPage = ref(1)
 const pageSize = 10
 const activeMode = ref<'direct' | 'transfer'>('direct')
+const isInitializing = ref(true)
+const trainResults = shallowRef<TrainProduct[]>([])
+const pagedTrains = shallowRef<TrainTableRow[]>([])
+let searchRequestId = 0
 
 const options = reactive<TrainOptions>({
   startStations: [],
@@ -508,10 +512,16 @@ const countdownText = computed(() => {
   return `${minutes}:${seconds}`
 })
 
-const pagedTrains = computed(() => {
+const updatePagedTrains = () => {
   const start = (currentPage.value - 1) * pageSize
-  return trainStore.trainsList.slice(start, start + pageSize).map(enrichTrainRow)
-})
+  pagedTrains.value = trainResults.value.slice(start, start + pageSize).map(enrichTrainRow)
+}
+
+const clearTrainResults = () => {
+  currentPage.value = 1
+  trainResults.value = []
+  updatePagedTrains()
+}
 
 const errorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
@@ -608,6 +618,7 @@ const loadOptions = async () => {
 }
 
 const loadTravelers = async () => {
+  if (travelers.value.length) return
   try {
     travelers.value = await getTravelers()
   } catch {
@@ -616,11 +627,12 @@ const loadTravelers = async () => {
 }
 
 const refreshTrainData = async () => {
+  const requestId = ++searchRequestId
   if (!hasRouteSelected()) {
     trainStore.setSearchParams({ ...searchForm })
-    trainStore.setTrainsList([])
-    currentPage.value = 1
+    clearTrainResults()
     hasSearched.value = false
+    searchLoading.value = false
     return
   }
   searchLoading.value = true
@@ -634,22 +646,27 @@ const refreshTrainData = async () => {
       seatTypes: searchForm.seatTypes
     }
     const trains = activeMode.value === 'transfer' ? await searchTrainTransfers(payload) : await searchTrains(payload)
-    trainStore.setTrainsList(trains)
+    if (requestId !== searchRequestId) return
     currentPage.value = 1
+    trainResults.value = trains
+    updatePagedTrains()
     hasSearched.value = true
   } catch (error: unknown) {
+    if (requestId !== searchRequestId) return
     ElMessage.error(errorMessage(error, '查询失败，请稍后重试'))
   } finally {
-    searchLoading.value = false
+    if (requestId === searchRequestId) {
+      searchLoading.value = false
+    }
   }
 }
 
 const scheduleRefresh = () => {
+  if (isInitializing.value) return
   if (autoSearchTimer.value) window.clearTimeout(autoSearchTimer.value)
   autoSearchTimer.value = window.setTimeout(async () => {
     if (!hasRouteSelected()) {
-      trainStore.setTrainsList([])
-      currentPage.value = 1
+      clearTrainResults()
       hasSearched.value = false
       return
     }
@@ -661,7 +678,8 @@ const selectDate = (date: string) => {
   searchForm.date = date
   trainStore.setSearchParams({ ...searchForm })
   currentPage.value = 1
-  refreshTrainData()
+  updatePagedTrains()
+  void refreshTrainData()
 }
 
 const openRefundDialog = () => {
@@ -740,6 +758,7 @@ const handleChangeTrain = async (train: TrainProduct) => {
 
 const openOrderDialog = (train: TrainProduct) => {
   trainStore.setSelectedTrain(train)
+  void loadTravelers()
   selectedTravelerKey.value = undefined
   orderForm.passengerName = ''
   orderForm.passengerPhone = ''
@@ -895,6 +914,8 @@ watch(
   scheduleRefresh
 )
 
+watch(currentPage, updatePagedTrains)
+
 onMounted(async () => {
   await nextTick()
   window.requestAnimationFrame(() => {
@@ -903,7 +924,8 @@ onMounted(async () => {
 })
 
 const initializePage = async () => {
-  await Promise.allSettled([loadTravelers(), loadOptions()])
+  await loadOptions()
+  isInitializing.value = false
   await refreshTrainData()
 }
 
