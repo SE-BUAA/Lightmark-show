@@ -59,10 +59,14 @@ public class FlightSearchService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final PointsMembershipService pointsMembershipService;
 
-    public FlightSearchService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public FlightSearchService(JdbcTemplate jdbcTemplate,
+                               ObjectMapper objectMapper,
+                               PointsMembershipService pointsMembershipService) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.pointsMembershipService = pointsMembershipService;
     }
 
     /**
@@ -271,16 +275,8 @@ public class FlightSearchService {
                 now,
                 now
         );
-        int points = order.getPay_amount() == null ? 0 : order.getPay_amount().divide(new BigDecimal("10"), 0, RoundingMode.DOWN).intValue();
-        jdbcTemplate.update(
-                "insert into points_log (user_id, type, amount, source, order_id, create_time) values (?, ?, ?, ?, ?, ?)",
-                Long.parseLong(order.getUser_id()),
-                1,
-                points,
-                "FLIGHT_PAY",
-                Long.parseLong(order.getId()),
-                now
-        );
+        int points = pointsMembershipService.calculateRewardPoints(order.getPay_amount());
+        pointsMembershipService.awardPoints(order.getUser_id(), order.getId(), "FLIGHT_PAY", order.getPay_amount());
         return paidResult(orderNo, method, points);
     }
 
@@ -317,6 +313,7 @@ public class FlightSearchService {
                 LocalDateTime.now(),
                 orderNo
         );
+        pointsMembershipService.revokePoints(order.getUser_id(), order.getId(), "FLIGHT_REFUND", order.getPay_amount());
         Map<String, Object> result = new LinkedHashMap<>(refundInfo);
         result.putAll(Map.of(
                 "orderNo", orderNo,
