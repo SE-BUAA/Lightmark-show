@@ -21,7 +21,11 @@
               开始预订
               <span class="btn-arrow">→</span>
             </router-link>
-            <router-link to="/login" class="btn btn-secondary btn-hero">
+            <router-link
+              v-if="showGuestActions"
+              to="/login"
+              class="btn btn-secondary btn-hero"
+            >
               登录 / 注册
             </router-link>
           </div>
@@ -139,7 +143,7 @@
       <div class="container cta-inner">
         <h2>准备好开启你的下一段旅程了吗？</h2>
         <p>注册即享会员专享价，积分抵扣更优惠</p>
-        <router-link to="/login" class="btn btn-primary btn-lg">
+        <router-link v-if="showGuestActions" to="/login" class="btn btn-primary btn-lg">
           立即注册
           <span class="btn-arrow">→</span>
         </router-link>
@@ -149,9 +153,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { useAuthStore } from "@/stores/auth";
 
 const activeTab = ref("flights");
+const authStore = useAuthStore();
+const showGuestActions = computed(() => !authStore.isLoggedIn);
 
 const searchTabs = [
   { key: "flights", label: "机票", icon: "✈" },

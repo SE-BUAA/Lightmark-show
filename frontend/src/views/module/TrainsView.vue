@@ -1,6 +1,6 @@
 <template>
   <div class="module-page">
-    <el-dialog v-model="showChangeCodeDialog" title="改签" width="420px">
+    <el-dialog v-if="showChangeCodeDialog" v-model="showChangeCodeDialog" title="改签" width="420px" destroy-on-close>
       <el-form label-width="80px">
         <el-form-item label="取票码">
           <el-input v-model="changePickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeChangeCode" />
@@ -12,7 +12,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showChangeListDialog" title="选择改签车次" width="820px">
+    <el-dialog v-if="showChangeListDialog" v-model="showChangeListDialog" title="选择改签车次" width="820px" destroy-on-close>
       <el-alert
         v-if="changePreview"
         class="change-alert"
@@ -43,7 +43,7 @@
       <el-empty v-else description="暂无可改签车次" />
     </el-dialog>
 
-    <el-dialog v-model="showChangeResultDialog" title="改签成功" width="480px">
+    <el-dialog v-if="showChangeResultDialog" v-model="showChangeResultDialog" title="改签成功" width="480px" destroy-on-close>
       <el-result icon="success" title="改签成功" :sub-title="changeResult?.message" />
       <el-descriptions v-if="changeResult" :column="1" border>
         <el-descriptions-item label="原订单号">{{ changeResult.oldOrderNo }}</el-descriptions-item>
@@ -147,13 +147,13 @@
         <el-table-column v-else label="中转车次" min-width="320">
           <template #default="{ row }">
             <div class="transfer-box">
-              <div v-for="(segment, index) in transferSegments(row)" :key="`${segmentTrainNo(segment)}-${index}`" class="transfer-line">
+              <div v-for="(segment, index) in row.__segments" :key="`${segmentTrainNo(segment)}-${index}`" class="transfer-line">
                 <span class="segment-index">第{{ index + 1 }}程</span>
                 <strong>{{ segmentTrainNo(segment) }}</strong>
                 <el-tag size="small" effect="plain">{{ segmentTrainType(segment) }}</el-tag>
                 <span>{{ segment.extra?.start_station }} - {{ segment.extra?.end_station }}</span>
                 <small>{{ segment.extra?.depart_time || '--:--' }} - {{ segment.extra?.arrive_time || '--:--' }}</small>
-                <span class="segment-seats">{{ availableSeatNames(segment).join('、') || '无座位信息' }}</span>
+                <span class="segment-seats">{{ row.__segmentSeatNames[index] || '无座位信息' }}</span>
               </div>
             </div>
           </template>
@@ -174,18 +174,18 @@
         </el-table-column>
         <el-table-column label="可选座位" min-width="260">
           <template #default="{ row }">
-            <el-tag v-for="seat in availableSeatNames(row)" :key="seat" class="tag" size="small">{{ seat }}</el-tag>
+            <el-tag v-for="seat in row.__seatNames" :key="seat" class="tag" size="small">{{ seat }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="价格" min-width="100">
-          <template #default="{ row }">{{ formatTrainPrices(row) }}</template>
+          <template #default="{ row }">{{ row.__priceText }}</template>
         </el-table-column>
         <el-table-column label="余票" min-width="80">
-          <template #default="{ row }">{{ availableTickets(row) }}</template>
+          <template #default="{ row }">{{ row.__availableTickets }}</template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" :disabled="availableTickets(row) <= 0" @click="openOrderDialog(row)">
+            <el-button type="primary" :disabled="row.__availableTickets <= 0" @click="openOrderDialog(row)">
               {{ activeMode === 'direct' ? '购买' : '购买两段' }}
             </el-button>
           </template>
@@ -205,7 +205,7 @@
       <el-empty v-else description="正在加载可用车次" />
     </section>
 
-    <el-dialog v-model="showRefundDialog" title="退票" width="420px">
+    <el-dialog v-if="showRefundDialog" v-model="showRefundDialog" title="退票" width="420px" destroy-on-close>
       <el-form label-width="80px">
         <el-form-item label="取票码">
           <el-input v-model="refundPickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeRefundCode" />
@@ -217,7 +217,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showOrderDialog" title="填写购票人信息" width="520px">
+    <el-dialog v-if="showOrderDialog" v-model="showOrderDialog" title="填写购票人信息" width="520px" destroy-on-close>
       <el-form ref="orderFormRef" :model="orderForm" :rules="orderRules" label-width="90px">
         <el-form-item label="常用出行人">
           <el-select v-model="selectedTravelerKey" placeholder="选择后自动填入" clearable @change="fillTraveler">
@@ -278,7 +278,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showPayDialog" title="订单支付" width="520px" :close-on-click-modal="false">
+    <el-dialog
+      v-if="showPayDialog"
+      v-model="showPayDialog"
+      title="订单支付"
+      width="520px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
       <el-descriptions :column="1" border>
         <el-descriptions-item label="订单号">{{ trainStore.currentOrder?.orderNo }}</el-descriptions-item>
         <el-descriptions-item label="车次">{{ trainStore.selectedTrain?.name }}</el-descriptions-item>
@@ -300,7 +307,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showTicketDialog" title="支付成功" width="420px">
+    <el-dialog v-if="showTicketDialog" v-model="showTicketDialog" title="支付成功" width="420px" destroy-on-close>
       <div class="ticket-code">
         <el-result icon="success" title="订票成功" sub-title="订单已支付成功" />
         <div class="ticket-actions">
@@ -312,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addTraveler, getTravelers, type TravelerDTO } from '@/api/user'
@@ -336,6 +343,14 @@ interface DateCandidate {
   label: string
   weekday: string
   isToday: boolean
+}
+
+type TrainTableRow = TrainProduct & {
+  __seatNames: string[]
+  __availableTickets: number
+  __priceText: string
+  __segments: TrainSegment[]
+  __segmentSeatNames: string[]
 }
 
 const trainStore = useTrainStore()
@@ -495,7 +510,7 @@ const countdownText = computed(() => {
 
 const pagedTrains = computed(() => {
   const start = (currentPage.value - 1) * pageSize
-  return trainStore.trainsList.slice(start, start + pageSize)
+  return trainStore.trainsList.slice(start, start + pageSize).map(enrichTrainRow)
 })
 
 const errorMessage = (error: unknown, fallback: string) => {
@@ -552,6 +567,18 @@ const formatTrainPrices = (train: TrainProduct) => {
   return min === max ? `¥${min}` : `¥${min} - ¥${max}`
 }
 
+const enrichTrainRow = (train: TrainProduct): TrainTableRow => {
+  const segments = transferSegments(train)
+  return {
+    ...train,
+    __seatNames: availableSeatNames(train),
+    __availableTickets: availableTickets(train),
+    __priceText: formatTrainPrices(train),
+    __segments: segments,
+    __segmentSeatNames: segments.map((segment) => availableSeatNames(segment).join('、'))
+  }
+}
+
 const selectedTrainSeatCount = (seat: string) => {
   return Number(trainStore.selectedTrain?.seats?.[seat] || 0)
 }
@@ -577,6 +604,14 @@ const loadOptions = async () => {
     options.dates = data.dates || []
   } catch {
     ElMessage.warning('筛选项加载失败，请稍后重试')
+  }
+}
+
+const loadTravelers = async () => {
+  try {
+    travelers.value = await getTravelers()
+  } catch {
+    travelers.value = []
   }
 }
 
@@ -861,14 +896,16 @@ watch(
 )
 
 onMounted(async () => {
-  try {
-    travelers.value = await getTravelers()
-  } catch {
-    travelers.value = []
-  }
-  await loadOptions()
-  await refreshTrainData()
+  await nextTick()
+  window.requestAnimationFrame(() => {
+    void initializePage()
+  })
 })
+
+const initializePage = async () => {
+  await Promise.allSettled([loadTravelers(), loadOptions()])
+  await refreshTrainData()
+}
 
 onUnmounted(clearTimers)
 </script>
