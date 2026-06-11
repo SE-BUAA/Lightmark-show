@@ -119,9 +119,9 @@ lightmark:
     mail:
       host: ${AUTH_MAIL_HOST:smtp.qq.com}
       port: ${AUTH_MAIL_PORT:465}
-      username: ${AUTH_MAIL_USERNAME:novaortus@qq.com}
-      password: ${AUTH_MAIL_PASSWORD:ehsigwjnvqaicidg}
-      from-email: ${AUTH_MAIL_FROM_EMAIL:novaortus@qq.com}
+      username: ${AUTH_MAIL_USERNAME:}
+      password: ${AUTH_MAIL_PASSWORD:}
+      from-email: ${AUTH_MAIL_FROM_EMAIL:}
       from-name: ${AUTH_MAIL_FROM_NAME:lightmark}
       ssl-enabled: ${AUTH_MAIL_SSL_ENABLED:true}
   jwt:
