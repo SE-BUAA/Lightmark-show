@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <defs>
+    <style>
+      .title { font: 600 24px Arial, Helvetica, sans-serif; fill: #111827; }
+      .h { font: 600 16px Arial, Helvetica, sans-serif; fill: #111827; }
+      .t { font: 14px Arial, Helvetica, sans-serif; fill: #374151; }
+      .mono { font: 13px Consolas, "Courier New", monospace; fill: #111827; }
+    </style>
+  </defs>
+  <rect x="16" y="16" width="928" height="608" rx="14" fill="#ffffff" stroke="#e5e7eb" stroke-width="2"/>
+  <text x="44" y="58" class="title">Automated Tests by Module (Backend)</text>
+
+  <text x="44" y="100" class="h">Inheritance (shared base)</text>
+  <text x="44" y="124" class="mono">BaseIntegrationTest -&gt; AuthFlowIntegrationTests / AdminApiIntegrationTests / FlightSearchApiIntegrationTests</text>
+  <text x="44" y="146" class="mono">BaseIntegrationTest -&gt; M6ItineraryCommunityIntegrationTests / UserLevelUpgradeInfoControllerTest / GenericCrudServiceTest</text>
+
+  <text x="44" y="190" class="h">Auth</text>
+  <text x="44" y="214" class="t">- Login/Register validation, captcha, email verification error-path</text>
+  <text x="64" y="238" class="mono">top.ortus.lightmark.backend.controller.AuthFlowIntegrationTests</text>
+
+  <text x="44" y="280" class="h">Admin</text>
+  <text x="44" y="304" class="t">- Dashboard, user/product/order operations, admin log write-through</text>
+  <text x="64" y="328" class="mono">top.ortus.lightmark.backend.AdminApiIntegrationTests</text>
+
+  <text x="44" y="370" class="h">Flights</text>
+  <text x="44" y="394" class="t">- Search, calendar, order preview/create/pay/cancel/refund</text>
+  <text x="64" y="418" class="mono">top.ortus.lightmark.backend.FlightSearchApiIntegrationTests</text>
+
+  <text x="44" y="460" class="h">Itinerary &amp; Community</text>
+  <text x="44" y="484" class="t">- AI itinerary, plan save/list, posts/comments/questions permission checks</text>
+  <text x="64" y="508" class="mono">top.ortus.lightmark.backend.M6ItineraryCommunityIntegrationTests</text>
+
+  <text x="44" y="550" class="h">Generic CRUD (reusable layer)</text>
+  <text x="44" y="574" class="t">- Dynamic table CRUD, column filtering, soft delete vs hard delete</text>
+  <text x="64" y="598" class="mono">top.ortus.lightmark.backend.service.GenericCrudServiceTest</text>
+</svg>

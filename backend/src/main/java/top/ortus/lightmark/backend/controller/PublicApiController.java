@@ -24,10 +24,11 @@ import top.ortus.lightmark.backend.dto.module.ReviewDTO;
 import top.ortus.lightmark.backend.dto.module.TravelPlanDTO;
 import top.ortus.lightmark.backend.exception.ApiException;
 import top.ortus.lightmark.backend.security.UserIdentity;
-import top.ortus.lightmark.backend.service.FlightSearchService;
 import top.ortus.lightmark.backend.service.CommunityService;
+import top.ortus.lightmark.backend.service.FlightSearchService;
 import top.ortus.lightmark.backend.service.ItineraryService;
 import top.ortus.lightmark.backend.service.ObjectStorageService;
+import top.ortus.lightmark.backend.service.OrderService;
 import top.ortus.lightmark.backend.utils.UserIdFormatter;
 
 import java.util.List;
@@ -42,17 +43,20 @@ public class PublicApiController {
     private final ItineraryService itineraryService;
     private final CommunityService communityService;
     private final ObjectStorageService objectStorageService;
+    private final OrderService orderService;
 
     public PublicApiController(FlightSearchService flightSearchService,
                                JwtTokenService jwtTokenService,
                                ItineraryService itineraryService,
                                CommunityService communityService,
-                               ObjectStorageService objectStorageService) {
+                               ObjectStorageService objectStorageService,
+                               OrderService orderService) {
         this.flightSearchService = flightSearchService;
         this.jwtTokenService = jwtTokenService;
         this.itineraryService = itineraryService;
         this.communityService = communityService;
         this.objectStorageService = objectStorageService;
+        this.orderService = orderService;
     }
 
     @GetMapping("/products")
@@ -143,6 +147,18 @@ public class PublicApiController {
 
     @PostMapping("/orders/{orderNo}/pay")
     public ApiResponse<Map<String, Object>> payOrder(@PathVariable String orderNo, @RequestBody Map<String, Object> payload) {
+        top.ortus.lightmark.backend.dao.Order order = orderService.getOrderByNo(orderNo);
+        if (order != null && !"FLIGHT".equals(order.getOrderType())) {
+            var result = orderService.payOrder(orderNo);
+            return ApiResponse.ok(Map.of(
+                    "orderNo", result.getOrderNo(),
+                    "status", result.getStatus(),
+                    "payAmount", result.getPayAmount(),
+                    "createTime", result.getCreateTime(),
+                    "expireTime", result.getExpireTime(),
+                    "pickupCode", result.getPickupCode() == null ? "" : result.getPickupCode()
+            ));
+        }
         return ApiResponse.ok(flightSearchService.payOrder(orderNo, payload));
     }
 
@@ -155,6 +171,16 @@ public class PublicApiController {
     @PostMapping("/orders/{orderNo}/refund")
     public ApiResponse<Map<String, Object>> refundOrder(@PathVariable String orderNo) {
         return ApiResponse.ok(flightSearchService.refundOrder(orderNo));
+    }
+
+    @PostMapping("/orders/{orderNo}/change")
+    public ApiResponse<Map<String, Object>> changeFlightOrder(@PathVariable String orderNo,
+                                                              @RequestBody Map<String, Object> body) {
+        String newProductId = body == null ? null : String.valueOf(body.get("productId"));
+        if (newProductId == null || newProductId.isBlank()) {
+            return ApiResponse.error(400, "new productId is required");
+        }
+        return ApiResponse.ok(flightSearchService.changeFlightOrder(orderNo, newProductId));
     }
 
     @GetMapping("/orders/{orderNo}/status")

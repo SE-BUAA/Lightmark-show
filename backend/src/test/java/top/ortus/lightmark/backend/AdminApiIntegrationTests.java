@@ -1,17 +1,18 @@
 package top.ortus.lightmark.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,22 +27,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
-class AdminApiIntegrationTests {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private JwtTokenService jwtTokenService;
+class AdminApiIntegrationTests extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private String adminToken() {
-        return jwtTokenService.createToken(1L, "系统管理员", List.of("ADMIN"));
+        return bearerToken(1L, "系统管理员", List.of("ADMIN"));
     }
 
     @Test
@@ -54,20 +46,44 @@ class AdminApiIntegrationTests {
 
     @Test
     void registerAndLoginShouldWork() throws Exception {
-        String account = "139" + System.currentTimeMillis();
+        String email = "fresh" + System.currentTimeMillis() + "@qq.com";
+        String verificationCode = "123456";
+
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update("""
+                        insert into auth_verification_code
+                        (target, channel, code, expire_time, consumed_time, send_count, create_time, update_time)
+                        values (?, 'EMAIL', ?, ?, null, 1, ?, ?)
+                        """,
+                email,
+                verificationCode,
+                Timestamp.valueOf(now.plusMinutes(5)),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
+        );
+
+        MockHttpSession registerSession = new MockHttpSession();
+        registerSession.setAttribute("auth:captcha", "ABCD");
+
         mockMvc.perform(post("/api/auth/register")
+                        .session(registerSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"account":"%s","password":"123456","nickname":"测试用户"}
-                                """.formatted(account)))
+                                {"email":"%s","password":"Password!1","nickname":"测试用户","verificationCode":"%s","captchaCode":"ABCD","privacyAccepted":true}
+                                """.formatted(email, verificationCode)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.email").value(email));
+
+        MockHttpSession loginSession = new MockHttpSession();
+        loginSession.setAttribute("auth:captcha", "QWER");
 
         String response = mockMvc.perform(post("/api/auth/login")
+                        .session(loginSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"account":"%s","password":"123456"}
-                                """.formatted(account)))
+                                {"account":"%s","password":"Password!1","captchaCode":"QWER","privacyAccepted":true}
+                                """.formatted(email)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn()
@@ -90,7 +106,7 @@ class AdminApiIntegrationTests {
     @Test
     void dashboardSummaryShouldReturnData() throws Exception {
         mockMvc.perform(get("/api/admin/dashboard/summary")
-                        .header("Authorization", "Bearer " + adminToken()))
+                        .header("Authorization", adminToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.totalUsers").value(2))
@@ -100,13 +116,13 @@ class AdminApiIntegrationTests {
     @Test
     void dashboardTrendsAndHotProductsShouldReturnData() throws Exception {
         mockMvc.perform(get("/api/admin/dashboard/trends")
-                        .header("Authorization", "Bearer " + adminToken()))
+                        .header("Authorization", adminToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.dates.length()").value(7));
+                .andExpect(jsonPath("$.data.length()").value(7));
 
         mockMvc.perform(get("/api/admin/dashboard/hot-products")
-                        .header("Authorization", "Bearer " + adminToken()))
+                        .header("Authorization", adminToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].name").value("G1次"));
@@ -115,7 +131,7 @@ class AdminApiIntegrationTests {
     @Test
     void productListCanFilterByType() throws Exception {
         mockMvc.perform(get("/api/admin/products")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .param("productType", "HOTEL"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
@@ -126,7 +142,7 @@ class AdminApiIntegrationTests {
     @Test
     void userListCanFilterByKeyword() throws Exception {
         mockMvc.perform(get("/api/admin/users")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .param("keyword", "普通"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
@@ -137,7 +153,7 @@ class AdminApiIntegrationTests {
     @Test
     void updatingUserStatusShouldWriteAdminLog() throws Exception {
         mockMvc.perform(put("/api/admin/users/2/status")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status": 1}
@@ -157,7 +173,7 @@ class AdminApiIntegrationTests {
     @Test
     void updatingUserLevelShouldWriteAdminLog() throws Exception {
         mockMvc.perform(put("/api/admin/users/2/level")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"level": 2}
@@ -177,7 +193,7 @@ class AdminApiIntegrationTests {
     @Test
     void createUpdateAndDeleteProductShouldWork() throws Exception {
         String response = mockMvc.perform(post("/api/admin/products")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productType":"HOTEL","name":"测试酒店","price":199.00,"stock":11,"soldCount":0,"status":1}
@@ -193,7 +209,7 @@ class AdminApiIntegrationTests {
         assertThat(productId).isNotBlank();
 
         mockMvc.perform(put("/api/admin/products/" + productId + "/price")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"price": 299.00}
@@ -202,7 +218,7 @@ class AdminApiIntegrationTests {
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(put("/api/admin/products/" + productId + "/stock")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"stock": 8}
@@ -211,7 +227,7 @@ class AdminApiIntegrationTests {
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(put("/api/admin/products/" + productId + "/status")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status": 0}
@@ -220,7 +236,7 @@ class AdminApiIntegrationTests {
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(delete("/api/admin/products/" + productId)
-                        .header("Authorization", "Bearer " + adminToken()))
+                        .header("Authorization", adminToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
@@ -231,14 +247,14 @@ class AdminApiIntegrationTests {
     @Test
     void orderListCanFilterAndUpdateStatusWithLog() throws Exception {
         mockMvc.perform(get("/api/admin/orders")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .param("status", "0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(1));
 
         mockMvc.perform(put("/api/admin/orders/ORD202604180003/status")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status": 3, "remark": "测试取消"}
@@ -258,7 +274,7 @@ class AdminApiIntegrationTests {
     @Test
     void orderRefundShouldUpdateAndLog() throws Exception {
         mockMvc.perform(post("/api/admin/orders/ORD202604180002/refund")
-                        .header("Authorization", "Bearer " + adminToken())
+                        .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"remark": "test refund"}

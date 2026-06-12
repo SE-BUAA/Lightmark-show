@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260">
+  <defs>
+    <style>
+      .title { font: 600 26px Arial, Helvetica, sans-serif; fill: #111827; }
+      .sub { font: 14px Arial, Helvetica, sans-serif; fill: #374151; }
+      .mono { font: 14px Consolas, "Courier New", monospace; fill: #111827; }
+      .stat { font: 600 18px Arial, Helvetica, sans-serif; fill: #111827; }
+    </style>
+  </defs>
+  <rect x="16" y="16" width="928" height="228" rx="14" fill="#ffffff" stroke="#e5e7eb" stroke-width="2"/>
+  <text x="44" y="64" class="title">Lightmark Backend Automated Test Summary</text>
+  <text x="44" y="98" class="sub">Command</text>
+  <text x="140" y="98" class="mono">mvn test</text>
+  <text x="44" y="126" class="sub">Executed At</text>
+  <text x="140" y="126" class="mono">2026-06-10 16:50 (Beijing time)</text>
+  <text x="44" y="170" class="stat">Tests</text>
+  <text x="140" y="170" class="mono">63</text>
+  <text x="240" y="170" class="stat">Failures</text>
+  <text x="340" y="170" class="mono">0</text>
+  <text x="420" y="170" class="stat">Errors</text>
+  <text x="500" y="170" class="mono">0</text>
+  <text x="580" y="170" class="stat">Skipped</text>
+  <text x="670" y="170" class="mono">0</text>
+  <text x="44" y="212" class="sub">Note: test profile disables Flyway and uses H2 schema/data initialization.</text>
+</svg>

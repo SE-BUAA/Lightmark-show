@@ -11,7 +11,9 @@ import top.ortus.lightmark.backend.dto.user.UserUpdateRequest;
 import top.ortus.lightmark.backend.exception.ApiException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 用户服务实现类，提供用户相关的业务逻辑
@@ -85,11 +87,14 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserDTO update(String id, UserUpdateRequest request) {
         User user = userRepositoryImpl.findById(id);
-        if (request.getPhone() != null) {
+        Set<String> nullableColumns = new LinkedHashSet<>();
+        if (request.isPhoneSpecified()) {
             user.setPhone(request.getPhone());
+            nullableColumns.add("phone");
         }
-        if (request.getEmail() != null) {
+        if (request.isEmailSpecified()) {
             user.setEmail(request.getEmail());
+            nullableColumns.add("email");
         }
         if (request.getPassword() != null) {
             user.setPassword(request.getPassword());
@@ -125,7 +130,7 @@ public class UserServiceImpl implements UserService {
             user.setLast_login_ip(request.getLast_login_ip());
         }
         user.setUpdate_time(LocalDateTime.now());
-        userRepositoryImpl.update(user);
+        userRepositoryImpl.update(user, nullableColumns);
         return UserConverter.toDto(userRepositoryImpl.findById(id));
     }
 

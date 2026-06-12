@@ -1,9 +1,9 @@
 <template>
   <div class="module-page">
-    <el-dialog v-model="showChangeCodeDialog" title="改签" width="420px">
+    <el-dialog v-model="showChangeCodeDialog" title="改签" width="420px" destroy-on-close>
       <el-form label-width="80px">
-        <el-form-item label="取票码">
-          <el-input v-model="changePickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeChangeCode" />
+        <el-form-item label="订单号">
+          <el-input v-model="changeOrderNo" placeholder="请输入订单号" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -12,38 +12,46 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showChangeListDialog" title="选择改签车次" width="820px">
-      <el-alert
-        v-if="changePreview"
-        class="change-alert"
-        :closable="false"
-        type="info"
-        :title="`${changePreview.startStation} - ${changePreview.endStation}，原车次 ${changePreview.trainName}，座位 ${changePreview.seatType}`"
-      />
-      <el-table v-if="changePreview?.candidates.length" :data="changePreview.candidates" stripe>
-        <el-table-column prop="name" label="车次" min-width="100" />
-        <el-table-column label="日期" min-width="110">
-          <template #default="{ row }">{{ row.extra?.date }}</template>
-        </el-table-column>
-        <el-table-column label="时间" min-width="140">
-          <template #default="{ row }">{{ row.extra?.depart_time }} - {{ row.extra?.arrive_time }}</template>
-        </el-table-column>
-        <el-table-column label="价格" min-width="90">
-          <template #default="{ row }">¥{{ row.price }}</template>
-        </el-table-column>
-        <el-table-column label="余票" min-width="80">
-          <template #default="{ row }">{{ availableTickets(row) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" :loading="changeSubmitLoading" @click="handleChangeTrain(row)">选择</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-else description="暂无可改签车次" />
+    <el-dialog v-if="showChangeListDialog" v-model="showChangeListDialog" title="选择改签车次" width="860px" destroy-on-close>
+      <div v-if="changePreview" class="change-context">
+        <el-alert :closable="false" type="info" :title="`${changePreview.startStation} → ${changePreview.endStation}，原 ${changePreview.trainName}，座位 ${changePreview.seatType}`" />
+      </div>
+      <div class="change-search-bar">
+        <div class="date-strip">
+          <button
+            v-for="d in changeDateOptions"
+            :key="d.date"
+            :class="['date-chip', { active: changeForm.date === d.date }]"
+            @click="changeForm.date = d.date"
+          >
+            <strong>{{ d.day }}</strong>
+            <span>{{ d.weekday }}</span>
+          </button>
+        </div>
+      </div>
+      <div class="change-train-list" v-if="changeCandidates.length">
+        <div
+          v-for="train in changeCandidates"
+          :key="train.id"
+          class="change-train-row"
+          @click="handleChangeTrain(train)"
+        >
+          <div class="train-info">
+            <strong class="train-name">{{ train.name }}</strong>
+            <span class="train-time">{{ train.extra?.depart_time || '-' }} → {{ train.extra?.arrive_time || '-' }}</span>
+          </div>
+          <div class="train-price">
+            <span class="price-tag">¥{{ train.price }}</span>
+            <el-button size="small" type="primary" :loading="changeSubmitLoading === train.id" @click.stop="handleChangeTrain(train)">
+              改签
+            </el-button>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="该日期暂无可用车次" />
     </el-dialog>
 
-    <el-dialog v-model="showChangeResultDialog" title="改签成功" width="480px">
+    <el-dialog v-if="showChangeResultDialog" v-model="showChangeResultDialog" title="改签成功" width="480px" destroy-on-close>
       <el-result icon="success" title="改签成功" :sub-title="changeResult?.message" />
       <el-descriptions v-if="changeResult" :column="1" border>
         <el-descriptions-item label="原订单号">{{ changeResult.oldOrderNo }}</el-descriptions-item>
@@ -136,24 +144,24 @@
 
       <div class="result-toolbar">
         <div>
-          <strong>{{ trainStore.trainsList.length }}</strong>
+          <strong>{{ trainResults.length }}</strong>
           <span>{{ activeMode === 'direct' ? '趟可选车次' : '个中转方案' }}</span>
           <el-tag v-if="searchForm.date" effect="plain">{{ searchForm.date }}</el-tag>
         </div>
       </div>
 
-      <el-table v-if="trainStore.trainsList.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
+      <el-table v-if="trainResults.length" v-loading="searchLoading" :data="pagedTrains" stripe class="train-table">
         <el-table-column v-if="activeMode === 'direct'" prop="name" label="车次" min-width="110" />
         <el-table-column v-else label="中转车次" min-width="320">
           <template #default="{ row }">
             <div class="transfer-box">
-              <div v-for="(segment, index) in transferSegments(row)" :key="`${segmentTrainNo(segment)}-${index}`" class="transfer-line">
+              <div v-for="(segment, index) in row.__segments" :key="`${segmentTrainNo(segment)}-${index}`" class="transfer-line">
                 <span class="segment-index">第{{ index + 1 }}程</span>
                 <strong>{{ segmentTrainNo(segment) }}</strong>
                 <el-tag size="small" effect="plain">{{ segmentTrainType(segment) }}</el-tag>
                 <span>{{ segment.extra?.start_station }} - {{ segment.extra?.end_station }}</span>
                 <small>{{ segment.extra?.depart_time || '--:--' }} - {{ segment.extra?.arrive_time || '--:--' }}</small>
-                <span class="segment-seats">{{ availableSeatNames(segment).join('、') || '无座位信息' }}</span>
+                <span class="segment-seats">{{ row.__segmentSeatNames[index] || '无座位信息' }}</span>
               </div>
             </div>
           </template>
@@ -174,28 +182,28 @@
         </el-table-column>
         <el-table-column label="可选座位" min-width="260">
           <template #default="{ row }">
-            <el-tag v-for="seat in availableSeatNames(row)" :key="seat" class="tag" size="small">{{ seat }}</el-tag>
+            <el-tag v-for="seat in row.__seatNames" :key="seat" class="tag" size="small">{{ seat }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="价格" min-width="100">
-          <template #default="{ row }">{{ formatTrainPrices(row) }}</template>
+          <template #default="{ row }">{{ row.__priceText }}</template>
         </el-table-column>
         <el-table-column label="余票" min-width="80">
-          <template #default="{ row }">{{ availableTickets(row) }}</template>
+          <template #default="{ row }">{{ row.__availableTickets }}</template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" :disabled="availableTickets(row) <= 0" @click="openOrderDialog(row)">
+            <el-button type="primary" :disabled="row.__availableTickets <= 0" @click="openOrderDialog(row)">
               {{ activeMode === 'direct' ? '购买' : '购买两段' }}
             </el-button>
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="trainStore.trainsList.length > pageSize" class="pagination-bar">
+      <div v-if="trainResults.length > pageSize" class="pagination-bar">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="trainStore.trainsList.length"
+          :total="trainResults.length"
           background
           layout="prev, pager, next, jumper, total"
         />
@@ -205,19 +213,19 @@
       <el-empty v-else description="正在加载可用车次" />
     </section>
 
-    <el-dialog v-model="showRefundDialog" title="退票" width="420px">
+    <el-dialog v-if="showRefundDialog" v-model="showRefundDialog" title="退票" width="420px" destroy-on-close>
       <el-form label-width="80px">
-        <el-form-item label="取票码">
-          <el-input v-model="refundPickupCode" maxlength="6" placeholder="请输入6位取票码" @input="normalizeRefundCode" />
+        <el-form-item label="订单号">
+          <el-input v-model="refundOrderNo" placeholder="请输入订单号" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showRefundDialog = false">取消</el-button>
-        <el-button type="warning" :loading="refundCodeLoading" @click="handleRefundByPickupCode">提交</el-button>
+        <el-button type="warning" :loading="refundCodeLoading" @click="handleRefundByOrderNo">提交</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showOrderDialog" title="填写购票人信息" width="520px">
+    <el-dialog v-if="showOrderDialog" v-model="showOrderDialog" title="填写购票人信息" width="520px" destroy-on-close>
       <el-form ref="orderFormRef" :model="orderForm" :rules="orderRules" label-width="90px">
         <el-form-item label="常用出行人">
           <el-select v-model="selectedTravelerKey" placeholder="选择后自动填入" clearable @change="fillTraveler">
@@ -278,29 +286,47 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showPayDialog" title="订单支付" width="520px" :close-on-click-modal="false">
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="订单号">{{ trainStore.currentOrder?.orderNo }}</el-descriptions-item>
-        <el-descriptions-item label="车次">{{ trainStore.selectedTrain?.name }}</el-descriptions-item>
-        <el-descriptions-item label="金额">¥{{ trainStore.currentOrder?.payAmount }}</el-descriptions-item>
-        <el-descriptions-item label="支付方式">
-          <el-radio-group v-model="paymentMethod" size="small">
-            <el-radio-button label="WECHAT">微信</el-radio-button>
-            <el-radio-button label="ALIPAY">支付宝</el-radio-button>
-            <el-radio-button label="MOCK_PAY">模拟支付</el-radio-button>
-          </el-radio-group>
-        </el-descriptions-item>
-        <el-descriptions-item label="剩余支付时间">
-          <el-text type="danger" size="large">{{ countdownText }}</el-text>
-        </el-descriptions-item>
-      </el-descriptions>
+    <el-dialog
+      v-if="showPayDialog"
+      v-model="showPayDialog"
+      :title="trainStore.currentOrders.length > 1 ? '订单支付（共' + trainStore.currentOrders.length + '笔）' : '订单支付'"
+      width="520px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <template v-for="(order, idx) in trainStore.currentOrders" :key="order.orderNo">
+        <el-descriptions v-if="idx > 0" style="margin-top: 12px" :column="1" border>
+          <el-descriptions-item :label="'第' + (idx + 1) + '程订单号'">{{ order.orderNo }}</el-descriptions-item>
+          <el-descriptions-item label="金额">¥{{ order.payAmount }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="idx === 0">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="订单号">{{ order.orderNo }}</el-descriptions-item>
+            <el-descriptions-item label="车次">{{ trainStore.selectedTrain?.name }}</el-descriptions-item>
+            <el-descriptions-item label="金额">¥{{ order.payAmount }}</el-descriptions-item>
+            <el-descriptions-item label="支付方式">
+              <el-radio-group v-model="paymentMethod" size="small">
+                <el-radio-button label="WECHAT">微信</el-radio-button>
+                <el-radio-button label="ALIPAY">支付宝</el-radio-button>
+                <el-radio-button label="MOCK_PAY">模拟支付</el-radio-button>
+              </el-radio-group>
+            </el-descriptions-item>
+            <el-descriptions-item label="剩余支付时间">
+              <el-text type="danger" size="large">{{ countdownText }}</el-text>
+            </el-descriptions-item>
+          </el-descriptions>
+          <div v-if="trainStore.currentOrders.length > 1" class="order-total-line">
+            合计：<strong>¥{{ totalPayAmount }}</strong>
+          </div>
+        </div>
+      </template>
       <template #footer>
         <el-button :loading="cancelLoading" @click="handleCancelOrder">取消订单</el-button>
         <el-button type="primary" :loading="payLoading" @click="handlePayOrder">支付</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showTicketDialog" title="支付成功" width="420px">
+    <el-dialog v-if="showTicketDialog" v-model="showTicketDialog" title="支付成功" width="420px" destroy-on-close>
       <div class="ticket-code">
         <el-result icon="success" title="订票成功" sub-title="订单已支付成功" />
         <div class="ticket-actions">
@@ -312,7 +338,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addTraveler, getTravelers, type TravelerDTO } from '@/api/user'
@@ -324,9 +351,9 @@ import {
   getTrainOptions,
   payOrder,
   previewTrainChange,
-  refundTrainOrderByPickupCode,
   searchTrainTransfers,
-  searchTrains
+  searchTrains,
+  type TrainBatchOrderResponse
 } from '@/api/train'
 import type { TrainChangePreviewResponse, TrainChangeResponse, TrainOptions, TrainProduct, TrainSegment } from '@/api/train'
 import { useTrainStore } from '@/stores/train'
@@ -338,6 +365,15 @@ interface DateCandidate {
   isToday: boolean
 }
 
+type TrainTableRow = TrainProduct & {
+  __seatNames: string[]
+  __availableTickets: number
+  __priceText: string
+  __segments: TrainSegment[]
+  __segmentSeatNames: string[]
+}
+
+const route = useRoute()
 const trainStore = useTrainStore()
 const trainTypeOptions = ['高铁', '动车', '普速']
 const seatTypeOptions = ['商务座', '一等座', '二等座', '硬卧', '软卧', '硬座']
@@ -356,12 +392,38 @@ const payLoading = ref(false)
 const cancelLoading = ref(false)
 const refundCodeLoading = ref(false)
 const changePreviewLoading = ref(false)
-const changeSubmitLoading = ref(false)
 const hasSearched = ref(false)
-const refundPickupCode = ref('')
-const changePickupCode = ref('')
+const refundOrderNo = ref('')
+const changeOrderNo = ref('')
 const changePreview = ref<TrainChangePreviewResponse | null>(null)
 const changeResult = ref<TrainChangeResponse | null>(null)
+const changeForm = reactive({ date: '' })
+const changeSubmitLoading = ref<string>('')
+
+const changeDateOptions = computed(() => {
+  const today = new Date()
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() + i)
+    const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    return {
+      date: formatDate(d),
+      day: String(d.getDate()).padStart(2, '0'),
+      weekday: weekdayLabels[d.getDay()]
+    }
+  })
+})
+
+const changeCandidates = computed(() => {
+  if (!changePreview.value?.candidates.length) return []
+  const selectedDate = changeForm.date
+  if (!selectedDate) return changePreview.value.candidates.slice(0, 30)
+  return changePreview.value.candidates.filter(c => {
+    const extraDate = c.extra?.date
+    const ticketDate = (c as any).departureDate || extraDate || ''
+    return ticketDate === selectedDate || !ticketDate
+  }).slice(0, 30)
+})
 const paymentMethod = ref<'WECHAT' | 'ALIPAY' | 'MOCK_PAY'>('WECHAT')
 const countdownSeconds = ref(0)
 const timer = ref<number>()
@@ -370,6 +432,10 @@ const autoSearchTimer = ref<number>()
 const currentPage = ref(1)
 const pageSize = 10
 const activeMode = ref<'direct' | 'transfer'>('direct')
+const isInitializing = ref(true)
+const trainResults = shallowRef<TrainProduct[]>([])
+const pagedTrains = shallowRef<TrainTableRow[]>([])
+let searchRequestId = 0
 
 const options = reactive<TrainOptions>({
   startStations: [],
@@ -493,10 +559,16 @@ const countdownText = computed(() => {
   return `${minutes}:${seconds}`
 })
 
-const pagedTrains = computed(() => {
+const updatePagedTrains = () => {
   const start = (currentPage.value - 1) * pageSize
-  return trainStore.trainsList.slice(start, start + pageSize)
-})
+  pagedTrains.value = trainResults.value.slice(start, start + pageSize).map(enrichTrainRow)
+}
+
+const clearTrainResults = () => {
+  currentPage.value = 1
+  trainResults.value = []
+  updatePagedTrains()
+}
 
 const errorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
@@ -539,6 +611,10 @@ const segmentTrainType = (segment: TrainSegment) => {
   return firstText(segment.train_type, segment.extra?.train_type, '-')
 }
 
+const totalPayAmount = computed(() =>
+  trainStore.currentOrders.reduce((sum, o) => sum + Number(o.payAmount || 0), 0)
+)
+
 const formatTrainPrices = (train: TrainProduct) => {
   const prices = train.prices || {}
   const displayPrices = availableSeatNames(train)
@@ -550,6 +626,18 @@ const formatTrainPrices = (train: TrainProduct) => {
   const min = Math.min(...displayPrices)
   const max = Math.max(...displayPrices)
   return min === max ? `¥${min}` : `¥${min} - ¥${max}`
+}
+
+const enrichTrainRow = (train: TrainProduct): TrainTableRow => {
+  const segments = transferSegments(train)
+  return {
+    ...train,
+    __seatNames: availableSeatNames(train),
+    __availableTickets: availableTickets(train),
+    __priceText: formatTrainPrices(train),
+    __segments: segments,
+    __segmentSeatNames: segments.map((segment) => availableSeatNames(segment).join('、'))
+  }
 }
 
 const selectedTrainSeatCount = (seat: string) => {
@@ -580,12 +668,22 @@ const loadOptions = async () => {
   }
 }
 
+const loadTravelers = async () => {
+  if (travelers.value.length) return
+  try {
+    travelers.value = await getTravelers()
+  } catch {
+    travelers.value = []
+  }
+}
+
 const refreshTrainData = async () => {
+  const requestId = ++searchRequestId
   if (!hasRouteSelected()) {
     trainStore.setSearchParams({ ...searchForm })
-    trainStore.setTrainsList([])
-    currentPage.value = 1
+    clearTrainResults()
     hasSearched.value = false
+    searchLoading.value = false
     return
   }
   searchLoading.value = true
@@ -599,22 +697,27 @@ const refreshTrainData = async () => {
       seatTypes: searchForm.seatTypes
     }
     const trains = activeMode.value === 'transfer' ? await searchTrainTransfers(payload) : await searchTrains(payload)
-    trainStore.setTrainsList(trains)
+    if (requestId !== searchRequestId) return
     currentPage.value = 1
+    trainResults.value = trains
+    updatePagedTrains()
     hasSearched.value = true
   } catch (error: unknown) {
+    if (requestId !== searchRequestId) return
     ElMessage.error(errorMessage(error, '查询失败，请稍后重试'))
   } finally {
-    searchLoading.value = false
+    if (requestId === searchRequestId) {
+      searchLoading.value = false
+    }
   }
 }
 
 const scheduleRefresh = () => {
+  if (isInitializing.value) return
   if (autoSearchTimer.value) window.clearTimeout(autoSearchTimer.value)
   autoSearchTimer.value = window.setTimeout(async () => {
     if (!hasRouteSelected()) {
-      trainStore.setTrainsList([])
-      currentPage.value = 1
+      clearTrainResults()
       hasSearched.value = false
       return
     }
@@ -626,39 +729,32 @@ const selectDate = (date: string) => {
   searchForm.date = date
   trainStore.setSearchParams({ ...searchForm })
   currentPage.value = 1
-  refreshTrainData()
+  updatePagedTrains()
+  void refreshTrainData()
 }
 
 const openRefundDialog = () => {
-  refundPickupCode.value = ''
+  refundOrderNo.value = ''
   showRefundDialog.value = true
 }
 
-const normalizeRefundCode = () => {
-  refundPickupCode.value = refundPickupCode.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
-
 const openChangeDialog = () => {
-  changePickupCode.value = ''
+  changeOrderNo.value = ''
   changePreview.value = null
   changeResult.value = null
   showChangeCodeDialog.value = true
 }
 
-const normalizeChangeCode = () => {
-  changePickupCode.value = changePickupCode.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
-
 const handlePreviewChange = async () => {
-  normalizeChangeCode()
-  if (!/^[A-Z0-9]{6}$/.test(changePickupCode.value)) {
-    ElMessage.warning('请输入6位取票码')
+  if (!changeOrderNo.value.trim()) {
+    ElMessage.warning('请输入订单号')
     return
   }
   changePreviewLoading.value = true
   try {
-    const result = await previewTrainChange(changePickupCode.value)
+    const result = await previewTrainChange(changeOrderNo.value.trim())
     changePreview.value = result
+    changeForm.date = changeDateOptions.value[0]?.date || ''
     showChangeCodeDialog.value = false
     showChangeListDialog.value = true
   } catch (error: unknown) {
@@ -670,7 +766,7 @@ const handlePreviewChange = async () => {
 
 const handleChangeTrain = async (train: TrainProduct) => {
   try {
-    await ElMessageBox.confirm('每张车票只能改签一次，确认后原订单和原取票码将不可用。是否继续？', '改签确认', {
+    await ElMessageBox.confirm('确认改签？原订单将不可用。', '改签确认', {
       confirmButtonText: '确认改签',
       cancelButtonText: '取消',
       type: 'warning'
@@ -679,32 +775,30 @@ const handleChangeTrain = async (train: TrainProduct) => {
     return
   }
 
-  changeSubmitLoading.value = true
+  const orderNo = changeOrderNo.value.trim()
+  changeSubmitLoading.value = train.id
   try {
-    const result = await changeTrainOrder(changePickupCode.value, train.id)
+    const result = await changeTrainOrder(orderNo, train.id)
     changeResult.value = result
-    const message =
-      result.differenceType === 'PAY'
-        ? `需补差价：¥${result.differenceAmount}`
-        : result.differenceType === 'REFUND'
-          ? `已退差价：¥${result.differenceAmount}`
-          : '无需补差价'
-    await ElMessageBox.alert(`${message}。新订单号：${result.newOrderNo}，新取票码：${result.pickupCode}`, '改签订单', {
-      confirmButtonText: '确定',
-      type: 'success'
-    })
+    const msg = result.differenceType === 'PAY'
+      ? `需补差价：¥${result.differenceAmount}`
+      : result.differenceType === 'REFUND'
+        ? `已退差价：¥${result.differenceAmount}`
+        : '无需补差价'
+    ElMessage.success(`${msg}，新订单号：${result.newOrderNo}`)
     showChangeListDialog.value = false
     showChangeResultDialog.value = true
     await refreshTrainData()
   } catch (error: unknown) {
     ElMessage.error(errorMessage(error, '改签失败，请稍后重试'))
   } finally {
-    changeSubmitLoading.value = false
+    changeSubmitLoading.value = ''
   }
 }
 
 const openOrderDialog = (train: TrainProduct) => {
   trainStore.setSelectedTrain(train)
+  void loadTravelers()
   selectedTravelerKey.value = undefined
   orderForm.passengerName = ''
   orderForm.passengerPhone = ''
@@ -728,21 +822,46 @@ const handleSubmitOrder = async () => {
   orderLoading.value = true
   try {
     await saveTravelerIfNeeded()
-    const order = await createTrainOrder({
-      productId: trainStore.selectedTrain.id,
-      passengerName: orderForm.passengerName,
-      passengerPhone: orderForm.passengerPhone,
-      passengerAge: orderForm.passengerAge,
-      seatType: isSelectedTransfer.value ? orderForm.transferSeatTypes.join(' / ') : orderForm.seatType,
-      transferSeatTypes: isSelectedTransfer.value ? orderForm.transferSeatTypes : undefined,
-      isStudent: orderForm.isStudent
-    })
-    trainStore.setCurrentOrder(order)
-    ElMessage.success('下单成功，请在10分钟内支付')
+    let orders: TrainOrderResponse[]
+
+    if (isSelectedTransfer.value) {
+      // transfer: create two separate orders, one per segment
+      const segments = transferSegments(trainStore.selectedTrain)
+      const results: TrainOrderResponse[] = []
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i]
+        const order = await createTrainOrder({
+          productId: segment.id || trainStore.selectedTrain.id,
+          passengerName: orderForm.passengerName,
+          passengerPhone: orderForm.passengerPhone,
+          passengerAge: orderForm.passengerAge,
+          seatType: orderForm.transferSeatTypes[i] || '',
+          transferSeatTypes: undefined,
+          isStudent: orderForm.isStudent
+        })
+        results.push(order)
+      }
+      orders = results
+    } else {
+      // direct: single order
+      const order = await createTrainOrder({
+        productId: trainStore.selectedTrain.id,
+        passengerName: orderForm.passengerName,
+        passengerPhone: orderForm.passengerPhone,
+        passengerAge: orderForm.passengerAge,
+        seatType: orderForm.seatType,
+        transferSeatTypes: undefined,
+        isStudent: orderForm.isStudent
+      })
+      orders = [order]
+    }
+
+    trainStore.setCurrentOrders(orders)
+    ElMessage.success(orders.length > 1 ? `已创建${orders.length}笔订单，请在10分钟内支付` : '下单成功，请在10分钟内支付')
     showOrderDialog.value = false
     showPayDialog.value = true
     await refreshTrainData()
-    startCountdown(order.expireTime)
+    startCountdown(orders[0].expireEpochMs || (new Date(orders[0].expireTime).getTime()))
   } catch (error: unknown) {
     ElMessage.error(errorMessage(error, '下单失败，请稍后重试'))
   } finally {
@@ -750,11 +869,14 @@ const handleSubmitOrder = async () => {
   }
 }
 
-const startCountdown = (expireTime: string) => {
+const startCountdown = (expireEpochMs: number) => {
   clearTimers()
-  updateCountdown(expireTime)
+  const update = () => {
+    countdownSeconds.value = Math.max(0, Math.floor((expireEpochMs - Date.now()) / 1000))
+  }
+  update()
   timer.value = window.setInterval(() => {
-    updateCountdown(expireTime)
+    update()
     if (countdownSeconds.value <= 0) {
       handleTimeout()
     }
@@ -762,33 +884,37 @@ const startCountdown = (expireTime: string) => {
   pollTimer.value = window.setInterval(pollOrderStatus, 5000)
 }
 
-const updateCountdown = (expireTime: string) => {
-  countdownSeconds.value = Math.max(0, Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000))
+const updateCountdown = (expireEpochMs: number) => {
+  countdownSeconds.value = Math.max(0, Math.floor((expireEpochMs - Date.now()) / 1000))
 }
 
 const pollOrderStatus = async () => {
-  const orderNo = trainStore.currentOrder?.orderNo
-  if (!orderNo) return
-  try {
-    const order = await getOrder(orderNo)
-    if (order.status === 2) {
-      showPayDialog.value = false
-      clearTimers()
-      ElMessage.warning('订单已取消，请重新选择车次')
-      await refreshTrainData()
+  const orders = trainStore.currentOrders
+  if (!orders.length) return
+  for (const order of orders) {
+    try {
+      const result = await getOrder(order.orderNo)
+      if (result.status === 2) {
+        showPayDialog.value = false
+        clearTimers()
+        ElMessage.warning('订单已取消，请重新选择车次')
+        await refreshTrainData()
+        return
+      }
+    } catch {
+      // 轮询失败不打断当前支付流程。
     }
-  } catch {
-    // 轮询失败不打断当前支付流程。
   }
 }
 
 const handlePayOrder = async () => {
-  const orderNo = trainStore.currentOrder?.orderNo
-  if (!orderNo) return
+  const orders = trainStore.currentOrders
+  if (!orders.length) return
   payLoading.value = true
   try {
-    const result = await payOrder(orderNo, paymentMethod.value)
-    trainStore.setCurrentOrder(result)
+    for (const order of orders) {
+      await payOrder(order.orderNo, paymentMethod.value)
+    }
     showPayDialog.value = false
     showTicketDialog.value = true
     clearTimers()
@@ -801,11 +927,13 @@ const handlePayOrder = async () => {
 }
 
 const handleCancelOrder = async () => {
-  const orderNo = trainStore.currentOrder?.orderNo
-  if (!orderNo) return
+  const orders = trainStore.currentOrders
+  if (!orders.length) return
   cancelLoading.value = true
   try {
-    await cancelOrder(orderNo)
+    for (const order of orders) {
+      await cancelOrder(order.orderNo)
+    }
     ElMessage.success('订单已取消')
     showPayDialog.value = false
     clearTimers()
@@ -817,15 +945,15 @@ const handleCancelOrder = async () => {
   }
 }
 
-const handleRefundByPickupCode = async () => {
-  normalizeRefundCode()
-  if (!/^[A-Z0-9]{6}$/.test(refundPickupCode.value)) {
-    ElMessage.warning('请输入6位取票码')
+const handleRefundByOrderNo = async () => {
+  const orderNo = refundOrderNo.value.trim()
+  if (!orderNo) {
+    ElMessage.warning('请输入订单号')
     return
   }
   refundCodeLoading.value = true
   try {
-    const result = await refundTrainOrderByPickupCode(refundPickupCode.value)
+    const result = await refundTrainOrder(orderNo)
     ElMessage.success(`${result.refundRule}，退款金额：¥${result.refundAmount}`)
     showRefundDialog.value = false
     await refreshTrainData()
@@ -860,15 +988,28 @@ watch(
   scheduleRefresh
 )
 
+watch(currentPage, updatePagedTrains)
+
 onMounted(async () => {
-  try {
-    travelers.value = await getTravelers()
-  } catch {
-    travelers.value = []
-  }
-  await loadOptions()
-  await refreshTrainData()
+  await nextTick()
+  window.requestAnimationFrame(() => {
+    void initializePage()
+  })
 })
+
+const initializePage = async () => {
+  await loadOptions()
+  isInitializing.value = false
+  await refreshTrainData()
+  // Auto-open change dialog when navigated from user center with order number
+  const changeNo = route.query.changeOrderNo as string
+  if (changeNo) {
+    changeOrderNo.value = changeNo
+    // Show loading, then auto-open change dialog
+    ElMessage.info('正在查询改签信息...')
+    setTimeout(() => handlePreviewChange(), 500)
+  }
+}
 
 onUnmounted(clearTimers)
 </script>
@@ -1062,6 +1203,118 @@ onUnmounted(clearTimers)
 
 .change-alert {
   margin-bottom: 16px;
+}
+
+.order-total-line {
+  text-align: right;
+  margin-top: 12px;
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+}
+
+.order-total-line strong {
+  color: var(--el-color-danger);
+  font-size: 18px;
+}
+
+.change-context {
+  margin-bottom: 16px;
+}
+
+.change-search-bar {
+  margin-bottom: 16px;
+}
+
+.change-search-bar .date-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+}
+
+.date-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font: inherit;
+}
+
+.date-chip.active {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.date-chip strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.date-chip span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.change-train-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.change-train-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.change-train-row:hover {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.change-train-row .train-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.change-train-row .train-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.change-train-row .train-time {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.change-train-row .train-price {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.price-tag {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--el-color-danger);
 }
 
 .traveler-phone {

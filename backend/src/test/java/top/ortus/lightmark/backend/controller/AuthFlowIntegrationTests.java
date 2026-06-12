@@ -1,14 +1,13 @@
 package top.ortus.lightmark.backend.controller;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import top.ortus.lightmark.backend.BaseIntegrationTest;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,10 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
-class AuthFlowIntegrationTests {
-
-    @Autowired
-    private MockMvc mockMvc;
+class AuthFlowIntegrationTests extends BaseIntegrationTest {
 
     @Test
     void loginShouldRequireCaptcha() throws Exception {
@@ -91,7 +87,8 @@ class AuthFlowIntegrationTests {
                         .content("""
                                 {"email":"newuser@qq.com","captchaCode":"QWER"}
                                 """))
-                .andExpect(status().isInternalServerError())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.msg").value("qq smtp username is not configured"));
     }
 

@@ -6,6 +6,8 @@ import java.time.LocalDate;
 public class UserUpdateRequest {
     private String phone;
     private String email;
+    private boolean phoneSpecified;
+    private boolean emailSpecified;
     private String password;
     private String nickname;
     private String avatar;
@@ -26,7 +28,13 @@ public class UserUpdateRequest {
     }
 
     public void setPhone(String phone) {
-        this.phone = phone;
+        this.phoneSpecified = true;
+        if (phone == null) {
+            this.phone = null;
+            return;
+        }
+        String v = phone.trim();
+        this.phone = v.isEmpty() ? null : v;
     }
 
     public String getEmail() {
@@ -34,7 +42,13 @@ public class UserUpdateRequest {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        this.emailSpecified = true;
+        if (email == null) {
+            this.email = null;
+            return;
+        }
+        String v = email.trim();
+        this.email = v.isEmpty() ? null : v;
     }
 
     public String getPassword() {
@@ -123,5 +137,13 @@ public class UserUpdateRequest {
 
     public void setLast_login_ip(String last_login_ip) {
         this.last_login_ip = last_login_ip;
+    }
+
+    public boolean isPhoneSpecified() {
+        return phoneSpecified;
+    }
+
+    public boolean isEmailSpecified() {
+        return emailSpecified;
     }
 }
