@@ -80,7 +80,9 @@ export interface OrderDTO {
   pay_time?: string;
   cancel_reason?: string;
   create_time?: string;
+  createEpochMs?: number;
   update_time?: string;
+  updateEpochMs?: number;
   changed_once?: number;
   original_order_no?: string;
 }

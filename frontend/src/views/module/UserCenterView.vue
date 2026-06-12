@@ -279,7 +279,7 @@
                   <div class="list-title">{{ orderTypeText(o.order_type) }} · {{ o.order_no }}</div>
                   <div class="list-sub">
                     实付 ¥{{ o.pay_amount }}
-                    <span v-if="o.create_time"> · {{ formatTime(o.create_time) }}</span>
+                    <span v-if="o.createEpochMs || o.create_time"> · {{ formatTime(o.createEpochMs || o.create_time) }}</span>
                   </div>
                   <div v-if="o.cancel_reason" class="list-sub order-reason">{{ o.cancel_reason }}</div>
                 </div>
@@ -464,18 +464,23 @@ const userGender = ref(0);
 const userBirthDate = ref("");
 const avatarUrl = ref("");
 
-const formatTime = (time: string) => {
-  if (!time) return ''
+const formatTime = (time: string | number) => {
+  if (time == null || time === '') return ''
   try {
-    const d = new Date(time)
-    if (isNaN(d.getTime())) return time
+    let d: Date
+    if (typeof time === 'number') {
+      d = new Date(time)
+    } else {
+      d = new Date(time)
+      if (isNaN(d.getTime())) return String(time)
+    }
     return d.toLocaleString('zh-CN', {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
       hour12: false
     })
   } catch {
-    return time
+    return String(time)
   }
 }
 
